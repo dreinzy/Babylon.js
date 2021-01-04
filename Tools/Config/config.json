@@ -36,7 +36,8 @@
             "BABYLON"
         ],
         "typedocJSON": "../../.temp/babylon.typedoc.json",
-        "typedocValidationBaseline": "../../dist/preview release/typedocValidationBaseline.json"
+        "typedocValidationBaseline": "../../dist/preview release/typedocValidationBaseline.json",
+        "sharedUiComponentsSrc": "sharedUiComponents"
     },
     "modules": [
         "core",
@@ -60,6 +61,11 @@
         "inspector",
         "viewer",
         "nodeEditor"
+    ],
+    "apps": [
+        "playground",
+        "sandbox",
+        "ktx2Decoder"
     ],
     "lintModules": [
         "core",
@@ -142,7 +148,9 @@
             },
             "es6": {
                 "packageName": "@babylonjs/core",
-                "readme": "readme-es6.md"
+                "readme": "readme-es6.md",
+                "license": "license.md",
+                "type": "module"
             }
         }
     },
@@ -244,7 +252,8 @@
             },
             "es6": {
                 "packageName": "@babylonjs/materials",
-                "readme": "dist/preview release/materialsLibrary/readme-es6.md"
+                "readme": "dist/preview release/materialsLibrary/readme-es6.md",
+                "type": "module"
             }
         }
     },
@@ -281,7 +290,8 @@
             },
             "es6": {
                 "packageName": "@babylonjs/post-processes",
-                "readme": "dist/preview release/postProcessesLibrary/readme-es6.md"
+                "readme": "dist/preview release/postProcessesLibrary/readme-es6.md",
+                "type": "module"
             }
         }
     },
@@ -358,7 +368,8 @@
             },
             "es6": {
                 "packageName": "@babylonjs/procedural-textures",
-                "readme": "dist/preview release/proceduralTexturesLibrary/readme-es6.md"
+                "readme": "dist/preview release/proceduralTexturesLibrary/readme-es6.md",
+                "type": "module"
             }
         }
     },
@@ -429,7 +440,8 @@
             },
             "es6": {
                 "packageName": "@babylonjs/loaders",
-                "readme": "dist/preview release/loaders/readme-es6.md"
+                "readme": "dist/preview release/loaders/readme-es6.md",
+                "type": "module"
             }
         }
     },
@@ -487,7 +499,8 @@
             },
             "es6": {
                 "packageName": "@babylonjs/serializers",
-                "readme": "dist/preview release/serializers/readme-es6.md"
+                "readme": "dist/preview release/serializers/readme-es6.md",
+                "type": "module"
             }
         }
     },
@@ -516,7 +529,8 @@
             },
             "es6": {
                 "packageName": "@babylonjs/gui",
-                "readme": "dist/preview release/gui/readme-es6.md"
+                "readme": "dist/preview release/gui/readme-es6.md",
+                "type": "module"
             }
         }
     },
@@ -537,6 +551,7 @@
                 "re-resizable",
                 "glTF"
             ],
+            "sharedUiComponents": "src/sharedUiComponents/",
             "umd": {
                 "packageName": "babylonjs-inspector",
                 "webpackRoot": "INSPECTOR",
@@ -600,6 +615,7 @@
                 "glTF",
                 "file-saver"
             ],
+            "sharedUiComponents": "src/sharedUiComponents/",
             "umd": {
                 "packageName": "babylonjs-node-editor",
                 "webpackRoot": "NODEEDITOR",
@@ -633,6 +649,34 @@
                 "typings": "babylon.nodeEditor.module.d.ts",
                 "index": "babylon.nodeEditor.max.js"
             }
+        }
+    },
+    "ktx2Decoder": {
+        "tempFileName": "babylon.ktx2Decoder.js",
+        "distFile": "/dist/preview release/babylon.ktx2Decoder.js",
+        "build": {
+            "ignoreInWorkerMode": true,
+            "ignoreInTestMode": true,
+            "distOutputDirectory": "../../dist/preview release/",
+            "mainFolder": "./ktx2Decoder/"
+        }
+    },
+    "playground": {
+        "distFile": "/Playground/dist/babylon.playground.js",
+        "build": {
+            "ignoreInWorkerMode": true,
+            "ignoreInTestMode": true,
+            "distOutputDirectory": "../../Playground/dist/",
+            "mainFolder": "./Playground/"
+        }
+    },
+    "sandbox": {
+        "distFile": "/sandbox/public/dist/babylon.sandbox.js",
+        "build": {
+            "ignoreInWorkerMode": true,
+            "ignoreInTestMode": true,
+            "distOutputDirectory": "../../sandbox/public/dist/",
+            "mainFolder": "./sandbox/"
         }
     },
     "viewer": {

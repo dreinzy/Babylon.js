@@ -5,6 +5,7 @@ var xhr = new XMLHttpRequest();
 
 xhr.open("GET", "/tests/validation/config.json", true);
 
+
 xhr.addEventListener("load", function () {
     if (xhr.status === 200) {
 
@@ -22,7 +23,8 @@ xhr.addEventListener("load", function () {
                     .require('/tests/validation/validation.js')
                     .testMode()
                     .useDist()
-                    .load(function () {
+                    .load(async function () {
+                        await init();
                         var info = engine.getGlInfo();
                         console.log("Webgl Version: " + info.version);
                         console.log("Webgl Vendor: " + info.vendor);

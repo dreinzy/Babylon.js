@@ -1,6 +1,6 @@
 import { Nullable } from "babylonjs/types";
 import { serializeAsVector3, serialize, SerializationHelper } from "babylonjs/Misc/decorators";
-import { Vector3, Matrix } from "babylonjs/Maths/math.vector";
+import { Vector3, Matrix, Quaternion } from "babylonjs/Maths/math.vector";
 import { IAnimatable } from 'babylonjs/Animations/animatable.interface';
 import { BaseTexture } from "babylonjs/Materials/Textures/baseTexture";
 import { MaterialDefines } from "babylonjs/Materials/materialDefines";
@@ -29,6 +29,7 @@ class SkyMaterialDefines extends MaterialDefines {
     public FOG = false;
     public VERTEXCOLOR = false;
     public VERTEXALPHA = false;
+    public IMAGEPROCESSINGPOSTPROCESS = false;
 
     constructor() {
         super();
@@ -112,10 +113,15 @@ export class SkyMaterial extends PushMaterial {
     @serialize()
     public cameraOffset: Vector3 = Vector3.Zero();
 
+    /**
+     * Defines the vector the skyMaterial should consider as up. (default is Vector3(0, 1, 0) as returned by Vector3.Up())
+     */
+    @serializeAsVector3()
+    public up: Vector3 = Vector3.Up();
+
     // Private members
     private _cameraPosition: Vector3 = Vector3.Zero();
-
-    private _renderId: number;
+    private _skyOrientation: Quaternion = new Quaternion();
 
     /**
      * Instantiates a new sky material.
@@ -175,10 +181,8 @@ export class SkyMaterial extends PushMaterial {
         var defines = <SkyMaterialDefines>subMesh._materialDefines;
         var scene = this.getScene();
 
-        if (!this.checkReadyOnEveryCall && subMesh.effect) {
-            if (this._renderId === scene.getRenderId()) {
-                return true;
-            }
+        if (this._isReadyForSubMesh(subMesh)) {
+            return true;
         }
 
         MaterialHelper.PrepareDefinesForMisc(mesh, scene, false, this.pointsCloud, this.fogEnabled, false, defines);
@@ -198,6 +202,8 @@ export class SkyMaterial extends PushMaterial {
                 fallbacks.addFallback(1, "FOG");
             }
 
+            defines.IMAGEPROCESSINGPOSTPROCESS = scene.imageProcessingConfiguration.applyByPostProcess;
+
             //Attributes
             var attribs = [VertexBuffer.PositionKind];
 
@@ -213,7 +219,7 @@ export class SkyMaterial extends PushMaterial {
                 ["world", "viewProjection", "view",
                     "vFogInfos", "vFogColor", "pointSize", "vClipPlane", "vClipPlane2", "vClipPlane3", "vClipPlane4", "vClipPlane5", "vClipPlane6",
                     "luminance", "turbidity", "rayleigh", "mieCoefficient", "mieDirectionalG", "sunPosition",
-                    "cameraPosition", "cameraOffset"
+                    "cameraPosition", "cameraOffset", "up"
                 ],
                 [],
                 join, fallbacks, this.onCompiled, this.onError), defines);
@@ -223,7 +229,7 @@ export class SkyMaterial extends PushMaterial {
             return false;
         }
 
-        this._renderId = scene.getRenderId();
+        defines._renderId = scene.getRenderId();
         subMesh.effect._wasPreviouslyReady = true;
 
         return true;
@@ -283,6 +289,8 @@ export class SkyMaterial extends PushMaterial {
 
         this._activeEffect.setVector3("cameraOffset", this.cameraOffset);
 
+        this._activeEffect.setVector3("up", this.up);
+
         if (this.luminance > 0) {
             this._activeEffect.setFloat("luminance", this.luminance);
         }
@@ -299,6 +307,9 @@ export class SkyMaterial extends PushMaterial {
             this.sunPosition.x = this.distance * Math.cos(phi);
             this.sunPosition.y = this.distance * Math.sin(phi) * Math.sin(theta);
             this.sunPosition.z = this.distance * Math.sin(phi) * Math.cos(theta);
+
+            Quaternion.FromUnitVectorsToRef(Vector3.UpReadOnly, this.up, this._skyOrientation);
+            this.sunPosition.rotateByQuaternionToRef(this._skyOrientation, this.sunPosition);
         }
 
         this._activeEffect.setVector3("sunPosition", this.sunPosition);

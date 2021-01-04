@@ -12,32 +12,87 @@ import { DataBuffer } from '../Meshes/dataBuffer';
 import { Tools } from "../Misc/tools";
 import { Observer } from "../Misc/observable";
 import { EnvironmentTextureTools, EnvironmentTextureSpecularInfoV1 } from "../Misc/environmentTextureTools";
-import { Matrix, Viewport, Color3 } from "../Maths/math";
-import { IColor4Like } from '../Maths/math.like';
 import { Scene } from "../scene";
 import { RenderTargetCreationOptions } from "../Materials/Textures/renderTargetCreationOptions";
 import { IPipelineContext } from './IPipelineContext';
-import { WebRequest } from '../Misc/webRequest';
-import { NativeShaderProcessor } from './Native/nativeShaderProcessor';
+import { IMatrixLike, IVector2Like, IVector3Like, IVector4Like, IColor3Like, IColor4Like, IViewportLike } from '../Maths/math.like';
 import { Logger } from "../Misc/logger";
 import { Constants } from './constants';
 import { ThinEngine, ISceneLike } from './thinEngine';
 import { IWebRequest } from '../Misc/interfaces/iWebRequest';
+import { EngineStore } from './engineStore';
+import { ShaderCodeInliner } from "./Processors/shaderCodeInliner";
+import { WebGL2ShaderProcessor } from '../Engines/WebGL/webGL2ShaderProcessors';
+import { RenderTargetTextureSize } from '../Engines/Extensions/engine.renderTarget';
+import { DepthTextureCreationOptions } from '../Engines/depthTextureCreationOptions';
 
 interface INativeEngine {
+
+    readonly TEXTURE_NEAREST_NEAREST: number;
+    readonly TEXTURE_LINEAR_LINEAR: number;
+    readonly TEXTURE_LINEAR_LINEAR_MIPLINEAR: number;
+    readonly TEXTURE_NEAREST_NEAREST_MIPNEAREST: number;
+    readonly TEXTURE_NEAREST_LINEAR_MIPNEAREST: number;
+    readonly TEXTURE_NEAREST_LINEAR_MIPLINEAR: number;
+    readonly TEXTURE_NEAREST_LINEAR: number;
+    readonly TEXTURE_NEAREST_NEAREST_MIPLINEAR: number;
+    readonly TEXTURE_LINEAR_NEAREST_MIPNEAREST: number;
+    readonly TEXTURE_LINEAR_NEAREST_MIPLINEAR: number;
+    readonly TEXTURE_LINEAR_LINEAR_MIPNEAREST: number;
+    readonly TEXTURE_LINEAR_NEAREST: number;
+
+    readonly DEPTH_TEST_LESS: number;
+    readonly DEPTH_TEST_LEQUAL: number;
+    readonly DEPTH_TEST_EQUAL: number;
+    readonly DEPTH_TEST_GEQUAL: number;
+    readonly DEPTH_TEST_GREATER: number;
+    readonly DEPTH_TEST_NOTEQUAL: number;
+    readonly DEPTH_TEST_NEVER: number;
+    readonly DEPTH_TEST_ALWAYS: number;
+
+    readonly ADDRESS_MODE_WRAP: number;
+    readonly ADDRESS_MODE_MIRROR: number;
+    readonly ADDRESS_MODE_CLAMP: number;
+    readonly ADDRESS_MODE_BORDER: number;
+    readonly ADDRESS_MODE_MIRROR_ONCE: number;
+
+    readonly TEXTURE_FORMAT_RGB8: number;
+    readonly TEXTURE_FORMAT_RGBA8: number;
+    readonly TEXTURE_FORMAT_RGBA32F: number;
+
+    readonly ATTRIB_TYPE_UINT8: number;
+    readonly ATTRIB_TYPE_INT16: number;
+    readonly ATTRIB_TYPE_FLOAT: number;
+
+    readonly ALPHA_DISABLE: number;
+    readonly ALPHA_ADD: number;
+    readonly ALPHA_COMBINE: number;
+    readonly ALPHA_SUBTRACT: number;
+    readonly ALPHA_MULTIPLY: number;
+    readonly ALPHA_MAXIMIZED: number;
+    readonly ALPHA_ONEONE: number;
+    readonly ALPHA_PREMULTIPLIED: number;
+    readonly ALPHA_PREMULTIPLIED_PORTERDUFF: number;
+    readonly ALPHA_INTERPOLATE: number;
+    readonly ALPHA_SCREENMODE: number;
+
+    dispose(): void;
+
     requestAnimationFrame(callback: () => void): void;
 
     createVertexArray(): any;
     deleteVertexArray(vertexArray: any): void;
     bindVertexArray(vertexArray: any): void;
 
-    createIndexBuffer(data: ArrayBufferView): any;
+    createIndexBuffer(data: ArrayBufferView, dynamic: boolean): any;
     deleteIndexBuffer(buffer: any): void;
     recordIndexBuffer(vertexArray: any, buffer: any): void;
+    updateDynamicIndexBuffer(buffer: any, data: ArrayBufferView, startingIndex: number): void;
 
-    createVertexBuffer(data: ArrayBufferView): any;
+    createVertexBuffer(data: ArrayBufferView, dynamic: boolean): any;
     deleteVertexBuffer(buffer: any): void;
     recordVertexBuffer(vertexArray: any, buffer: any, location: number, byteOffset: number, byteStride: number, numElements: number, type: number, normalized: boolean): void;
+    updateDynamicVertexBuffer(buffer: any, data: ArrayBufferView, byteOffset: number, byteLength: number): void;
 
     createProgram(vertexShader: string, fragmentShader: string): any;
     getUniforms(shaderProgram: any, uniformsNames: string[]): WebGLUniformLocation[];
@@ -47,7 +102,7 @@ interface INativeEngine {
     setState(culling: boolean, zOffset: number, reverseSide: boolean): void;
     setZOffset(zOffset: number): void;
     getZOffset(): number;
-    setDepthTest(enable: boolean): void;
+    setDepthTest(enable: number): void;
     getDepthWrite(): boolean;
     setDepthWrite(enable: boolean): void;
     setColorWrite(enable: boolean): void;
@@ -55,6 +110,9 @@ interface INativeEngine {
 
     setMatrix(uniform: WebGLUniformLocation, matrix: Float32Array): void;
     setInt(uniform: WebGLUniformLocation, int: number): void;
+    setInt2(uniform: WebGLUniformLocation, int1: number, int2: number): void;
+    setInt3(uniform: WebGLUniformLocation, int1: number, int2: number, int3: number): void;
+    setInt4(uniform: WebGLUniformLocation, int1: number, int2: number, int3: number, int4: number): void;
     setIntArray(uniform: WebGLUniformLocation, array: Int32Array): void;
     setIntArray2(uniform: WebGLUniformLocation, array: Int32Array): void;
     setIntArray3(uniform: WebGLUniformLocation, array: Int32Array): void;
@@ -72,9 +130,11 @@ interface INativeEngine {
     setFloat4(uniform: WebGLUniformLocation, x: number, y: number, z: number, w: number): void;
 
     createTexture(): WebGLTexture;
-    loadTexture(texture: WebGLTexture, buffer: ArrayBuffer | ArrayBufferView | Blob, generateMips: boolean, invertY: boolean): boolean;
-    loadCubeTexture(texture: WebGLTexture, data: Array<ArrayBufferView>, generateMips: boolean): boolean;
-    loadCubeTextureWithMips(texture: WebGLTexture, data: Array<Array<ArrayBufferView>>): boolean;
+    createDepthTexture(texture: WebGLTexture, width: number, height: number): WebGLTexture;
+    loadTexture(texture: WebGLTexture, data: ArrayBufferView, generateMips: boolean, invertY: boolean, onSuccess: () => void, onError: () => void): void;
+    loadRawTexture(texture: WebGLTexture, data: ArrayBufferView, width: number, height: number, format: number, generateMips: boolean, invertY: boolean): void;
+    loadCubeTexture(texture: WebGLTexture, data: Array<ArrayBufferView>, generateMips: boolean, onSuccess: () => void, onError: () => void): void;
+    loadCubeTextureWithMips(texture: WebGLTexture, data: Array<Array<ArrayBufferView>>, onSuccess: () => void, onError: () => void): void;
     getTextureWidth(texture: WebGLTexture): number;
     getTextureHeight(texture: WebGLTexture): number;
     setTextureSampling(texture: WebGLTexture, filter: number): void; // filter is a NativeFilter.XXXX value.
@@ -91,10 +151,7 @@ interface INativeEngine {
     drawIndexed(fillMode: number, indexStart: number, indexCount: number): void;
     draw(fillMode: number, vertexStart: number, vertexCount: number): void;
 
-    clear(flags: number): void;
-    clearColor(r: number, g: number, b: number, a: number): void;
-    clearDepth(depth: number): void;
-    clearStencil(stencil: number): void;
+    clear(color: Nullable<IColor4Like>, depth?: number, stencil?: number): void;
 
     getRenderWidth(): number;
     getRenderHeight(): number;
@@ -121,6 +178,536 @@ class NativePipelineContext implements IPipelineContext {
     }
 
     public nativeProgram: any;
+
+    private _valueCache: { [key: string]: any } = {};
+    private _uniforms: { [key: string]: Nullable<WebGLUniformLocation> };
+
+    public engine: NativeEngine;
+    public context?: WebGLRenderingContext;
+    public vertexShader?: WebGLShader;
+    public fragmentShader?: WebGLShader;
+    public isParallelCompiled: boolean;
+    public onCompiled?: () => void;
+    public transformFeedback?: WebGLTransformFeedback | null;
+
+    constructor(engine: NativeEngine) {
+        this.engine = engine;
+    }
+
+    public _fillEffectInformation(effect: Effect, uniformBuffersNames: { [key: string]: number }, uniformsNames: string[], uniforms: { [key: string]: Nullable<WebGLUniformLocation> }, samplerList: string[], samplers: { [key: string]: number }, attributesNames: string[], attributes: number[]) {
+        const engine = this.engine;
+        if (engine.supportsUniformBuffers) {
+            for (var name in uniformBuffersNames) {
+                effect.bindUniformBlock(name, uniformBuffersNames[name]);
+            }
+        }
+
+        const effectAvailableUniforms = this.engine.getUniforms(this, uniformsNames);
+        effectAvailableUniforms.forEach((uniform, index) => {
+            uniforms[uniformsNames[index]] = uniform;
+        });
+        this._uniforms = uniforms;
+
+        let index: number;
+        for (index = 0; index < samplerList.length; index++) {
+            const sampler = effect.getUniform(samplerList[index]);
+            if (sampler == null) {
+                samplerList.splice(index, 1);
+                index--;
+            }
+        }
+
+        samplerList.forEach((name, index) => {
+            samplers[name] = index;
+        });
+
+        attributes.push(...engine.getAttributes(this, attributesNames));
+    }
+
+    /**
+     * Release all associated resources.
+     **/
+    public dispose() {
+        this._uniforms = { };
+    }
+
+    /** @hidden */
+    public _cacheMatrix(uniformName: string, matrix: IMatrixLike): boolean {
+        var cache = this._valueCache[uniformName];
+        var flag = matrix.updateFlag;
+        if (cache !== undefined && cache === flag) {
+            return false;
+        }
+
+        this._valueCache[uniformName] = flag;
+
+        return true;
+    }
+
+    /** @hidden */
+    public _cacheFloat2(uniformName: string, x: number, y: number): boolean {
+        var cache = this._valueCache[uniformName];
+        if (!cache) {
+            cache = [x, y];
+            this._valueCache[uniformName] = cache;
+            return true;
+        }
+
+        var changed = false;
+        if (cache[0] !== x) {
+            cache[0] = x;
+            changed = true;
+        }
+        if (cache[1] !== y) {
+            cache[1] = y;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /** @hidden */
+    public _cacheFloat3(uniformName: string, x: number, y: number, z: number): boolean {
+        var cache = this._valueCache[uniformName];
+        if (!cache) {
+            cache = [x, y, z];
+            this._valueCache[uniformName] = cache;
+            return true;
+        }
+
+        var changed = false;
+        if (cache[0] !== x) {
+            cache[0] = x;
+            changed = true;
+        }
+        if (cache[1] !== y) {
+            cache[1] = y;
+            changed = true;
+        }
+        if (cache[2] !== z) {
+            cache[2] = z;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /** @hidden */
+    public _cacheFloat4(uniformName: string, x: number, y: number, z: number, w: number): boolean {
+        var cache = this._valueCache[uniformName];
+        if (!cache) {
+            cache = [x, y, z, w];
+            this._valueCache[uniformName] = cache;
+            return true;
+        }
+
+        var changed = false;
+        if (cache[0] !== x) {
+            cache[0] = x;
+            changed = true;
+        }
+        if (cache[1] !== y) {
+            cache[1] = y;
+            changed = true;
+        }
+        if (cache[2] !== z) {
+            cache[2] = z;
+            changed = true;
+        }
+        if (cache[3] !== w) {
+            cache[3] = w;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /**
+     * Sets an integer value on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param value Value to be set.
+     */
+    public setInt(uniformName: string, value: number): void {
+        var cache = this._valueCache[uniformName];
+        if (cache !== undefined && cache === value) {
+            return;
+        }
+
+        if (this.engine.setInt(this._uniforms[uniformName]!, value)) {
+            this._valueCache[uniformName] = value;
+        }
+    }
+
+    /**
+     * Sets a int2 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param x First int in int2.
+     * @param y Second int in int2.
+     */
+    public setInt2(uniformName: string, x: number, y: number): void {
+        if (this._cacheFloat2(uniformName, x, y)) {
+            if (!this.engine.setInt2(this._uniforms[uniformName], x, y)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a int3 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param x First int in int3.
+     * @param y Second int in int3.
+     * @param y Third int in int3.
+     */
+    public setInt3(uniformName: string, x: number, y: number, z: number): void {
+        if (this._cacheFloat3(uniformName, x, y, z)) {
+            if (!this.engine.setInt3(this._uniforms[uniformName], x, y, z)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a int4 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param x First int in int4.
+     * @param y Second int in int4.
+     * @param y Third int in int4.
+     * @param w Fourth int in int4.
+     */
+    public setInt4(uniformName: string, x: number, y: number, z: number, w: number): void {
+        if (this._cacheFloat4(uniformName, x, y, z, w)) {
+            if (!this.engine.setInt4(this._uniforms[uniformName], x, y, z, w)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets an int array on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setIntArray(uniformName: string, array: Int32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setIntArray(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an int array 2 on a uniform variable. (Array is specified as single array eg. [1,2,3,4] will result in [[1,2],[3,4]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setIntArray2(uniformName: string, array: Int32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setIntArray2(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an int array 3 on a uniform variable. (Array is specified as single array eg. [1,2,3,4,5,6] will result in [[1,2,3],[4,5,6]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setIntArray3(uniformName: string, array: Int32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setIntArray3(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an int array 4 on a uniform variable. (Array is specified as single array eg. [1,2,3,4,5,6,7,8] will result in [[1,2,3,4],[5,6,7,8]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setIntArray4(uniformName: string, array: Int32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setIntArray4(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an float array on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setFloatArray(uniformName: string, array: Float32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setFloatArray(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an float array 2 on a uniform variable. (Array is specified as single array eg. [1,2,3,4] will result in [[1,2],[3,4]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setFloatArray2(uniformName: string, array: Float32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setFloatArray2(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an float array 3 on a uniform variable. (Array is specified as single array eg. [1,2,3,4,5,6] will result in [[1,2,3],[4,5,6]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setFloatArray3(uniformName: string, array: Float32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setFloatArray3(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an float array 4 on a uniform variable. (Array is specified as single array eg. [1,2,3,4,5,6,7,8] will result in [[1,2,3,4],[5,6,7,8]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setFloatArray4(uniformName: string, array: Float32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setFloatArray4(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an array on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setArray(uniformName: string, array: number[]): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setArray(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an array 2 on a uniform variable. (Array is specified as single array eg. [1,2,3,4] will result in [[1,2],[3,4]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setArray2(uniformName: string, array: number[]): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setArray2(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an array 3 on a uniform variable. (Array is specified as single array eg. [1,2,3,4,5,6] will result in [[1,2,3],[4,5,6]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     * @returns this effect.
+     */
+    public setArray3(uniformName: string, array: number[]): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setArray3(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets an array 4 on a uniform variable. (Array is specified as single array eg. [1,2,3,4,5,6,7,8] will result in [[1,2,3,4],[5,6,7,8]] in the shader)
+     * @param uniformName Name of the variable.
+     * @param array array to be set.
+     */
+    public setArray4(uniformName: string, array: number[]): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setArray4(this._uniforms[uniformName]!, array);
+    }
+
+    /**
+     * Sets matrices on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param matrices matrices to be set.
+     */
+    public setMatrices(uniformName: string, matrices: Float32Array): void {
+        if (!matrices) {
+            return;
+        }
+
+        this._valueCache[uniformName] = null;
+        this.engine.setMatrices(this._uniforms[uniformName]!, matrices);
+    }
+
+    /**
+     * Sets matrix on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param matrix matrix to be set.
+     */
+    public setMatrix(uniformName: string, matrix: IMatrixLike): void {
+        if (this._cacheMatrix(uniformName, matrix)) {
+            if (!this.engine.setMatrices(this._uniforms[uniformName]!, matrix.toArray() as Float32Array)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a 3x3 matrix on a uniform variable. (Speicified as [1,2,3,4,5,6,7,8,9] will result in [1,2,3][4,5,6][7,8,9] matrix)
+     * @param uniformName Name of the variable.
+     * @param matrix matrix to be set.
+     */
+    public setMatrix3x3(uniformName: string, matrix: Float32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setMatrix3x3(this._uniforms[uniformName]!, matrix);
+    }
+
+    /**
+     * Sets a 2x2 matrix on a uniform variable. (Speicified as [1,2,3,4] will result in [1,2][3,4] matrix)
+     * @param uniformName Name of the variable.
+     * @param matrix matrix to be set.
+     */
+    public setMatrix2x2(uniformName: string, matrix: Float32Array): void {
+        this._valueCache[uniformName] = null;
+        this.engine.setMatrix2x2(this._uniforms[uniformName]!, matrix);
+    }
+
+    /**
+     * Sets a float on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param value value to be set.
+     * @returns this effect.
+     */
+    public setFloat(uniformName: string, value: number): void {
+        var cache = this._valueCache[uniformName];
+        if (cache !== undefined && cache === value) {
+            return;
+        }
+
+        if (this.engine.setFloat(this._uniforms[uniformName]!, value)) {
+            this._valueCache[uniformName] = value;
+        }
+    }
+
+    /**
+     * Sets a boolean on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param bool value to be set.
+     */
+    public setBool(uniformName: string, bool: boolean): void {
+        var cache = this._valueCache[uniformName];
+        if (cache !== undefined && cache === bool) {
+            return;
+        }
+
+        if (this.engine.setInt(this._uniforms[uniformName]!, bool ? 1 : 0)) {
+            this._valueCache[uniformName] = bool ? 1 : 0;
+        }
+    }
+
+    /**
+     * Sets a Vector2 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param vector2 vector2 to be set.
+     */
+    public setVector2(uniformName: string, vector2: IVector2Like): void {
+        if (this._cacheFloat2(uniformName, vector2.x, vector2.y)) {
+            if (!this.engine.setFloat2(this._uniforms[uniformName]!, vector2.x, vector2.y)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a float2 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param x First float in float2.
+     * @param y Second float in float2.
+     */
+    public setFloat2(uniformName: string, x: number, y: number): void {
+        if (this._cacheFloat2(uniformName, x, y)) {
+            if (!this.engine.setFloat2(this._uniforms[uniformName]!, x, y)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a Vector3 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param vector3 Value to be set.
+     */
+    public setVector3(uniformName: string, vector3: IVector3Like): void {
+        if (this._cacheFloat3(uniformName, vector3.x, vector3.y, vector3.z)) {
+            if (!this.engine.setFloat3(this._uniforms[uniformName]!, vector3.x, vector3.y, vector3.z)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a float3 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param x First float in float3.
+     * @param y Second float in float3.
+     * @param z Third float in float3.
+     */
+    public setFloat3(uniformName: string, x: number, y: number, z: number): void {
+        if (this._cacheFloat3(uniformName, x, y, z)) {
+            if (!this.engine.setFloat3(this._uniforms[uniformName]!, x, y, z)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a Vector4 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param vector4 Value to be set.
+     */
+    public setVector4(uniformName: string, vector4: IVector4Like): void {
+        if (this._cacheFloat4(uniformName, vector4.x, vector4.y, vector4.z, vector4.w)) {
+            if (!this.engine.setFloat4(this._uniforms[uniformName]!, vector4.x, vector4.y, vector4.z, vector4.w)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a float4 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param x First float in float4.
+     * @param y Second float in float4.
+     * @param z Third float in float4.
+     * @param w Fourth float in float4.
+     * @returns this effect.
+     */
+    public setFloat4(uniformName: string, x: number, y: number, z: number, w: number): void {
+        if (this._cacheFloat4(uniformName, x, y, z, w)) {
+            if (!this.engine.setFloat4(this._uniforms[uniformName]!, x, y, z, w)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a Color3 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param color3 Value to be set.
+     */
+    public setColor3(uniformName: string, color3: IColor3Like): void {
+        if (this._cacheFloat3(uniformName, color3.r, color3.g, color3.b)) {
+            if (!this.engine.setFloat3(this._uniforms[uniformName]!, color3.r, color3.g, color3.b)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a Color4 on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param color3 Value to be set.
+     * @param alpha Alpha value to be set.
+     */
+    public setColor4(uniformName: string, color3: IColor3Like, alpha: number): void {
+        if (this._cacheFloat4(uniformName, color3.r, color3.g, color3.b, alpha)) {
+            if (!this.engine.setFloat4(this._uniforms[uniformName]!, color3.r, color3.g, color3.b, alpha)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets a Color4 on a uniform variable
+     * @param uniformName defines the name of the variable
+     * @param color4 defines the value to be set
+     */
+    public setDirectColor4(uniformName: string, color4: IColor4Like): void {
+        if (this._cacheFloat4(uniformName, color4.r, color4.g, color4.b, color4.a)) {
+            if (!this.engine.setFloat4(this._uniforms[uniformName]!, color4.r, color4.g, color4.b, color4.a)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
 }
 
 /**
@@ -136,48 +723,6 @@ class NativeDataBuffer extends DataBuffer {
      * Accessor value used to identify/retrieve a natively-stored vertex buffer.
      */
     public nativeVertexBuffer?: any;
-}
-
-// TODO: change this to match bgfx.
-// Must match Filter enum in SpectreEngine.h.
-class NativeFilter {
-    public static readonly POINT = 0;
-    public static readonly MINPOINT_MAGPOINT_MIPPOINT = NativeFilter.POINT;
-    public static readonly BILINEAR = 1;
-    public static readonly MINLINEAR_MAGLINEAR_MIPPOINT = NativeFilter.BILINEAR;
-    public static readonly TRILINEAR = 2;
-    public static readonly MINLINEAR_MAGLINEAR_MIPLINEAR = NativeFilter.TRILINEAR;
-    public static readonly ANISOTROPIC = 3;
-    public static readonly POINT_COMPARE = 4;
-    public static readonly TRILINEAR_COMPARE = 5;
-    public static readonly MINBILINEAR_MAGPOINT = 6;
-    public static readonly MINLINEAR_MAGPOINT_MIPLINEAR = NativeFilter.MINBILINEAR_MAGPOINT;
-    public static readonly MINPOINT_MAGPOINT_MIPLINEAR = 7;
-    public static readonly MINPOINT_MAGLINEAR_MIPPOINT = 8;
-    public static readonly MINPOINT_MAGLINEAR_MIPLINEAR = 9;
-    public static readonly MINLINEAR_MAGPOINT_MIPPOINT = 10;
-}
-
-// these flags match bgfx.
-class NativeClearFlags
-{
-    public static readonly CLEAR_COLOR = 1;
-    public static readonly CLEAR_DEPTH = 2;
-    public static readonly CLEAR_STENCIL = 4;
-}
-// TODO: change this to match bgfx.
-// Must match AddressMode enum in SpectreEngine.h.
-class NativeAddressMode {
-    public static readonly WRAP = 0;
-    public static readonly MIRROR = 1;
-    public static readonly CLAMP = 2;
-    public static readonly BORDER = 3;
-    public static readonly MIRROR_ONCE = 4;
-}
-
-class NativeTextureFormat {
-    public static readonly RGBA8 = 0;
-    public static readonly RGBA32F = 1;
 }
 
 /** @hidden */
@@ -199,6 +744,8 @@ export class NativeEngine extends Engine {
     private readonly _native: INativeEngine = new _native.Engine();
     /** Defines the invalid handle returned by bgfx when resource creation goes wrong */
     private readonly INVALID_HANDLE = 65535;
+    private _boundBuffersVertexArray: any = null;
+    private _currentDepthTest: number = this._native.DEPTH_TEST_LEQUAL;
 
     public getHardwareScalingLevel(): number {
         return 1.0;
@@ -229,8 +776,9 @@ export class NativeEngine extends Engine {
             pvrtc: null,
             etc1: null,
             etc2: null,
+            bptc: null,
             maxAnisotropy: 16,  // TODO: Retrieve this smartly. Currently set to D3D11 maximum allowable value.
-            uintIndices: false,
+            uintIndices: true,
             fragmentDepthSupported: false,
             highPrecisionShaderSupported: true,
             colorBufferFloat: false,
@@ -247,10 +795,45 @@ export class NativeEngine extends Engine {
             instancedArrays: false,
             canUseTimestampForTimerQuery: false,
             blendMinMax: false,
-            maxMSAASamples: 1
+            maxMSAASamples: 1,
+            canUseGLInstanceID: true,
+        };
+
+        this._features = {
+            forceBitmapOverHTMLImageElement: false,
+            supportRenderAndCopyToLodForFloatTextures: false,
+            supportDepthStencilTexture: false,
+            supportShadowSamplers: false,
+            uniformBufferHardCheckMatrix: false,
+            allowTexturePrefiltering: false,
+            trackUbosInFrame: false,
+            supportCSM: false,
+            basisNeedsPOT: false,
+            support3DTextures: false,
+            needTypeSuffixInShaderConstants: false,
+            supportMSAA: false,
+            supportSSAO2: false,
+            supportExtendedTextureFormats: false,
+            supportSwitchCaseInShader: false,
+            supportSyncTextureRead: false,
+            _collectUbosUpdatedInFrame: false,
         };
 
         Tools.Log("Babylon Native (v" + Engine.Version + ") launched");
+
+        Tools.LoadScript = function (scriptUrl, onSuccess, onError, scriptId) {
+            Tools.LoadFile(scriptUrl, (data) => {
+                Function(data as string).apply(null);
+                if (onSuccess) {
+                    onSuccess();
+                }
+            }, undefined, undefined, false,
+            (request, exception) => {
+                if (onError) {
+                    onError("LoadScript Error", exception);
+                }
+            });
+        };
 
         // Wrappers
         if (typeof URL === "undefined") {
@@ -265,7 +848,15 @@ export class NativeEngine extends Engine {
         }
 
         // Shader processor
-        this._shaderProcessor = new NativeShaderProcessor();
+        this._shaderProcessor = new WebGL2ShaderProcessor();
+    }
+
+    public dispose(): void {
+        super.dispose();
+        if (this._boundBuffersVertexArray) {
+            this._native.deleteVertexArray(this._boundBuffersVertexArray);
+        }
+        this._native.dispose();
     }
 
     /**
@@ -273,7 +864,8 @@ export class NativeEngine extends Engine {
      * @hidden
      */
     protected _queueNewFrame(bindedRenderFunction: any, requester?: any): number {
-        if (requester.requestAnimationFrame) {
+        // Use the provided requestAnimationFrame, unless the requester is the window. In that case, we will default to the Babylon Native version of requestAnimationFrame.
+        if (requester.requestAnimationFrame && requester !== window) {
             requester.requestAnimationFrame(bindedRenderFunction);
         } else {
             this._native.requestAnimationFrame(bindedRenderFunction);
@@ -311,47 +903,40 @@ export class NativeEngine extends Engine {
     }
 
     public clear(color: Nullable<IColor4Like>, backBuffer: boolean, depth: boolean, stencil: boolean = false): void {
-        var mode = 0;
-        if (backBuffer && color) {
-            this._native.clearColor(color.r, color.g, color.b, color.a !== undefined ? color.a : 1.0);
-            mode |= NativeClearFlags.CLEAR_COLOR;
+        if (this.useReverseDepthBuffer) {
+            throw new Error("reverse depth buffer is not currently implemented");
         }
-        if (depth) {
-            this._native.clearDepth(1.0);
-            mode |= NativeClearFlags.CLEAR_DEPTH;
-        }
-        if (stencil) {
-            this._native.clearStencil(0);
-            mode |= NativeClearFlags.CLEAR_STENCIL;
-        }
-        this._native.clear(mode);
+
+        this._native.clear(backBuffer ? color : null, depth ? 1.0 : undefined, stencil ? 0 : undefined);
     }
 
-    public createIndexBuffer(indices: IndicesArray): NativeDataBuffer {
+    public createIndexBuffer(indices: IndicesArray, updateable?: boolean): NativeDataBuffer {
         const data = this._normalizeIndexData(indices);
         const buffer = new NativeDataBuffer();
         buffer.references = 1;
         buffer.is32Bits = (data.BYTES_PER_ELEMENT === 4);
-        buffer.nativeIndexBuffer = this._native.createIndexBuffer(data);
-        if (buffer.nativeVertexBuffer === this.INVALID_HANDLE) {
-            throw new Error("Could not create a native index buffer.");
+        if (data.length) {
+            buffer.nativeIndexBuffer = this._native.createIndexBuffer(data, updateable ?? false);
+            if (buffer.nativeVertexBuffer === this.INVALID_HANDLE) {
+                throw new Error("Could not create a native index buffer.");
+            }
+        } else {
+            buffer.nativeVertexBuffer = this.INVALID_HANDLE;
         }
         return buffer;
     }
 
-    public createVertexBuffer(data: DataArray): NativeDataBuffer {
+    public createVertexBuffer(data: DataArray, updateable?: boolean): NativeDataBuffer {
         const buffer = new NativeDataBuffer();
         buffer.references = 1;
-        buffer.nativeVertexBuffer = this._native.createVertexBuffer(ArrayBuffer.isView(data) ? data : new Float32Array(data));
+        buffer.nativeVertexBuffer = this._native.createVertexBuffer(ArrayBuffer.isView(data) ? data : new Float32Array(data), updateable ?? false);
         if (buffer.nativeVertexBuffer === this.INVALID_HANDLE) {
             throw new Error("Could not create a native vertex buffer.");
         }
         return buffer;
     }
 
-    public recordVertexArrayObject(vertexBuffers: { [key: string]: VertexBuffer; }, indexBuffer: Nullable<NativeDataBuffer>, effect: Effect): WebGLVertexArrayObject {
-        const vertexArray = this._native.createVertexArray();
-
+    protected _recordVertexArrayObject(vertexArray: any, vertexBuffers: { [key: string]: VertexBuffer; }, indexBuffer: Nullable<NativeDataBuffer>, effect: Effect): void {
         if (indexBuffer) {
             this._native.recordIndexBuffer(vertexArray, indexBuffer.nativeIndexBuffer);
         }
@@ -365,12 +950,33 @@ export class NativeEngine extends Engine {
                 if (vertexBuffer) {
                     const buffer = vertexBuffer.getBuffer() as Nullable<NativeDataBuffer>;
                     if (buffer) {
-                        this._native.recordVertexBuffer(vertexArray, buffer.nativeVertexBuffer, location, vertexBuffer.byteOffset, vertexBuffer.byteStride, vertexBuffer.getSize(), vertexBuffer.type, vertexBuffer.normalized);
+                        this._native.recordVertexBuffer(
+                            vertexArray,
+                            buffer.nativeVertexBuffer,
+                            location,
+                            vertexBuffer.byteOffset,
+                            vertexBuffer.byteStride,
+                            vertexBuffer.getSize(),
+                            this._getNativeAttribType(vertexBuffer.type),
+                            vertexBuffer.normalized);
                     }
                 }
             }
         }
+    }
 
+    public bindBuffers(vertexBuffers: { [key: string]: VertexBuffer; }, indexBuffer: Nullable<NativeDataBuffer>, effect: Effect): void {
+        if (this._boundBuffersVertexArray) {
+            this._native.deleteVertexArray(this._boundBuffersVertexArray);
+        }
+        this._boundBuffersVertexArray = this._native.createVertexArray();
+        this._recordVertexArrayObject(this._boundBuffersVertexArray, vertexBuffers, indexBuffer, effect);
+        this._native.bindVertexArray(this._boundBuffersVertexArray);
+    }
+
+    public recordVertexArrayObject(vertexBuffers: { [key: string]: VertexBuffer; }, indexBuffer: Nullable<NativeDataBuffer>, effect: Effect): WebGLVertexArrayObject {
+        const vertexArray = this._native.createVertexArray();
+        this._recordVertexArrayObject(vertexArray, vertexBuffers, indexBuffer, effect);
         return vertexArray;
     }
 
@@ -392,7 +998,7 @@ export class NativeEngine extends Engine {
      * @param fillMode defines the primitive to use
      * @param indexStart defines the starting index
      * @param indexCount defines the number of index to draw
-     * @param instancesCount defines the number of instances to draw (if instanciation is enabled)
+     * @param instancesCount defines the number of instances to draw (if instantiation is enabled)
      */
     public drawElementsType(fillMode: number, indexStart: number, indexCount: number, instancesCount?: number): void {
         // Apply states
@@ -416,7 +1022,7 @@ export class NativeEngine extends Engine {
      * @param fillMode defines the primitive to use
      * @param verticesStart defines the index of first vertex to draw
      * @param verticesCount defines the count of vertices to draw
-     * @param instancesCount defines the number of instances to draw (if instanciation is enabled)
+     * @param instancesCount defines the number of instances to draw (if instantiation is enabled)
      */
     public drawArraysType(fillMode: number, verticesStart: number, verticesCount: number, instancesCount?: number): void {
         // Apply states
@@ -432,10 +1038,10 @@ export class NativeEngine extends Engine {
     }
 
     public createPipelineContext(): IPipelineContext {
-        return new NativePipelineContext();
+        return new NativePipelineContext(this);
     }
 
-    public _preparePipelineContext(pipelineContext: IPipelineContext, vertexSourceCode: string, fragmentSourceCode: string, createAsRaw: boolean, rebuildRebind: any, defines: Nullable<string>, transformFeedbackVaryings: Nullable<string[]>) {
+    public _preparePipelineContext(pipelineContext: IPipelineContext, vertexSourceCode: string, fragmentSourceCode: string, createAsRaw: boolean, rawVertexSourceCode: string, rawFragmentSourceCode: string, rebuildRebind: any, defines: Nullable<string>, transformFeedbackVaryings: Nullable<string[]>) {
         const nativePipelineContext = pipelineContext as NativePipelineContext;
 
         if (createAsRaw) {
@@ -464,10 +1070,19 @@ export class NativeEngine extends Engine {
 
     public createShaderProgram(pipelineContext: IPipelineContext, vertexCode: string, fragmentCode: string, defines: Nullable<string>, context?: WebGLRenderingContext, transformFeedbackVaryings: Nullable<string[]> = null): any {
         this.onBeforeShaderCompilationObservable.notifyObservers(this);
-        const program = this._native.createProgram(
-            ThinEngine._ConcatenateShader(vertexCode, defines),
-            ThinEngine._ConcatenateShader(fragmentCode, defines)
-        );
+
+        const vertexInliner = new ShaderCodeInliner(vertexCode);
+        vertexInliner.processCode();
+        vertexCode = vertexInliner.code;
+
+        const fragmentInliner = new ShaderCodeInliner(fragmentCode);
+        fragmentInliner.processCode();
+        fragmentCode = fragmentInliner.code;
+
+        vertexCode = ThinEngine._ConcatenateShader(vertexCode, defines);
+        fragmentCode = ThinEngine._ConcatenateShader(fragmentCode, defines);
+
+        const program = this._native.createProgram(vertexCode, fragmentCode);
         this.onAfterShaderCompilationObservable.notifyObservers(this);
         return program;
     }
@@ -513,7 +1128,7 @@ export class NativeEngine extends Engine {
         this._currentEffect = null;
     }
 
-    public setMatrix(uniform: WebGLUniformLocation, matrix: Matrix): void {
+    public setMatrix(uniform: WebGLUniformLocation, matrix: IMatrixLike): void {
         if (!uniform) {
             return;
         }
@@ -537,7 +1152,7 @@ export class NativeEngine extends Engine {
         return this._native.getRenderHeight();
     }
 
-    public setViewport(viewport: Viewport, requiredWidth?: number, requiredHeight?: number): void {
+    public setViewport(viewport: IViewportLike, requiredWidth?: number, requiredHeight?: number): void {
         this._cachedViewport = viewport;
         this._native.setViewPort(viewport.x, viewport.y, viewport.width, viewport.height);
     }
@@ -567,7 +1182,7 @@ export class NativeEngine extends Engine {
      * @param enable defines the state to set
      */
     public setDepthBuffer(enable: boolean): void {
-        this._native.setDepthTest(enable);
+        this._native.setDepthTest(enable ? this._currentDepthTest : this._native.DEPTH_TEST_ALWAYS);
     }
 
     /**
@@ -576,6 +1191,26 @@ export class NativeEngine extends Engine {
      */
     public getDepthWrite(): boolean {
         return this._native.getDepthWrite();
+    }
+
+    public setDepthFunctionToGreater(): void {
+        this._currentDepthTest = this._native.DEPTH_TEST_GREATER;
+        this._native.setDepthTest(this._currentDepthTest);
+    }
+
+    public setDepthFunctionToGreaterOrEqual(): void {
+        this._currentDepthTest = this._native.DEPTH_TEST_GEQUAL;
+        this._native.setDepthTest(this._currentDepthTest);
+    }
+
+    public setDepthFunctionToLess(): void {
+        this._currentDepthTest = this._native.DEPTH_TEST_LESS;
+        this._native.setDepthTest(this._currentDepthTest);
+    }
+
+    public setDepthFunctionToLessOrEqual(): void {
+        this._currentDepthTest = this._native.DEPTH_TEST_LEQUAL;
+        this._native.setDepthTest(this._currentDepthTest);
     }
 
     /**
@@ -618,12 +1253,14 @@ export class NativeEngine extends Engine {
      * Sets the current alpha mode
      * @param mode defines the mode to use (one of the BABYLON.Constants.ALPHA_XXX)
      * @param noDepthWriteChange defines if depth writing state should remains unchanged (false by default)
-     * @see http://doc.babylonjs.com/resources/transparency_and_how_meshes_are_rendered
+     * @see https://doc.babylonjs.com/resources/transparency_and_how_meshes_are_rendered
      */
     public setAlphaMode(mode: number, noDepthWriteChange: boolean = false): void {
         if (this._alphaMode === mode) {
             return;
         }
+
+        mode = this._getNativeAlphaMode(mode);
 
         this._native.setBlendMode(mode);
 
@@ -636,187 +1273,209 @@ export class NativeEngine extends Engine {
 
     /**
      * Gets the current alpha mode
-     * @see http://doc.babylonjs.com/resources/transparency_and_how_meshes_are_rendered
+     * @see https://doc.babylonjs.com/resources/transparency_and_how_meshes_are_rendered
      * @returns the current alpha mode
      */
     public getAlphaMode(): number {
         return this._alphaMode;
     }
 
-    public setInt(uniform: WebGLUniformLocation, int: number): void {
+    public setInt(uniform: WebGLUniformLocation, int: number): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setInt(uniform, int);
+        return true;
     }
 
-    public setIntArray(uniform: WebGLUniformLocation, array: Int32Array): void {
+    public setIntArray(uniform: WebGLUniformLocation, array: Int32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setIntArray(uniform, array);
+        return true;
     }
 
-    public setIntArray2(uniform: WebGLUniformLocation, array: Int32Array): void {
+    public setIntArray2(uniform: WebGLUniformLocation, array: Int32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setIntArray2(uniform, array);
+        return true;
     }
 
-    public setIntArray3(uniform: WebGLUniformLocation, array: Int32Array): void {
+    public setIntArray3(uniform: WebGLUniformLocation, array: Int32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setIntArray3(uniform, array);
+        return true;
     }
 
-    public setIntArray4(uniform: WebGLUniformLocation, array: Int32Array): void {
+    public setIntArray4(uniform: WebGLUniformLocation, array: Int32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setIntArray4(uniform, array);
+        return true;
     }
 
-    public setFloatArray(uniform: WebGLUniformLocation, array: Float32Array): void {
+    public setFloatArray(uniform: WebGLUniformLocation, array: Float32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray(uniform, array);
+        return true;
     }
 
-    public setFloatArray2(uniform: WebGLUniformLocation, array: Float32Array): void {
+    public setFloatArray2(uniform: WebGLUniformLocation, array: Float32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray2(uniform, array);
+        return true;
     }
 
-    public setFloatArray3(uniform: WebGLUniformLocation, array: Float32Array): void {
+    public setFloatArray3(uniform: WebGLUniformLocation, array: Float32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray3(uniform, array);
+        return true;
     }
 
-    public setFloatArray4(uniform: WebGLUniformLocation, array: Float32Array): void {
+    public setFloatArray4(uniform: WebGLUniformLocation, array: Float32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray4(uniform, array);
+        return true;
     }
 
-    public setArray(uniform: WebGLUniformLocation, array: number[]): void {
+    public setArray(uniform: WebGLUniformLocation, array: number[]): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray(uniform, array);
+        return true;
     }
 
-    public setArray2(uniform: WebGLUniformLocation, array: number[]): void {
+    public setArray2(uniform: WebGLUniformLocation, array: number[]): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray2(uniform, array);
+        return true;
     }
 
-    public setArray3(uniform: WebGLUniformLocation, array: number[]): void {
+    public setArray3(uniform: WebGLUniformLocation, array: number[]): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray3(uniform, array);
+        return true;
     }
 
-    public setArray4(uniform: WebGLUniformLocation, array: number[]): void {
+    public setArray4(uniform: WebGLUniformLocation, array: number[]): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloatArray4(uniform, array);
+        return true;
     }
 
-    public setMatrices(uniform: WebGLUniformLocation, matrices: Float32Array): void {
+    public setMatrices(uniform: WebGLUniformLocation, matrices: Float32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setMatrices(uniform, matrices);
+        return true;
     }
 
-    public setMatrix3x3(uniform: WebGLUniformLocation, matrix: Float32Array): void {
+    public setMatrix3x3(uniform: WebGLUniformLocation, matrix: Float32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setMatrix3x3(uniform, matrix);
+        return true;
     }
 
-    public setMatrix2x2(uniform: WebGLUniformLocation, matrix: Float32Array): void {
+    public setMatrix2x2(uniform: WebGLUniformLocation, matrix: Float32Array): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setMatrix2x2(uniform, matrix);
+        return true;
     }
 
-    public setFloat(uniform: WebGLUniformLocation, value: number): void {
+    public setFloat(uniform: WebGLUniformLocation, value: number): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloat(uniform, value);
+        return true;
     }
 
-    public setFloat2(uniform: WebGLUniformLocation, x: number, y: number): void {
+    public setFloat2(uniform: WebGLUniformLocation, x: number, y: number): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloat2(uniform, x, y);
+        return true;
     }
 
-    public setFloat3(uniform: WebGLUniformLocation, x: number, y: number, z: number): void {
+    public setFloat3(uniform: WebGLUniformLocation, x: number, y: number, z: number): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloat3(uniform, x, y, z);
+        return true;
     }
 
-    public setFloat4(uniform: WebGLUniformLocation, x: number, y: number, z: number, w: number): void {
+    public setFloat4(uniform: WebGLUniformLocation, x: number, y: number, z: number, w: number): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloat4(uniform, x, y, z, w);
+        return true;
     }
 
-    public setColor3(uniform: WebGLUniformLocation, color3: Color3): void {
+    public setColor3(uniform: WebGLUniformLocation, color3: IColor3Like): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloat3(uniform, color3.r, color3.g, color3.b);
+        return true;
     }
 
-    public setColor4(uniform: WebGLUniformLocation, color3: Color3, alpha: number): void {
+    public setColor4(uniform: WebGLUniformLocation, color3: IColor3Like, alpha: number): boolean {
         if (!uniform) {
-            return;
+            return false;
         }
 
         this._native.setFloat4(uniform, color3.r, color3.g, color3.b, alpha);
+        return true;
     }
 
     public wipeCaches(bruteForce?: boolean): void {
@@ -839,19 +1498,75 @@ export class NativeEngine extends Engine {
         this._cachedEffectForVertexBuffers = null;
     }
 
-    public _createTexture(): WebGLTexture {
+    protected _createTexture(): WebGLTexture {
         return this._native.createTexture();
     }
 
     protected _deleteTexture(texture: Nullable<WebGLTexture>): void {
-        this._native.deleteTexture(texture);
+        if (texture) {
+            this._native.deleteTexture(texture);
+        }
+    }
+
+    /**
+     * Update the content of a dynamic texture
+     * @param texture defines the texture to update
+     * @param canvas defines the canvas containing the source
+     * @param invertY defines if data must be stored with Y axis inverted
+     * @param premulAlpha defines if alpha is stored as premultiplied
+     * @param format defines the format of the data
+     * @param forceBindTexture if the texture should be forced to be bound eg. after a graphics context loss (Default: false)
+     */
+    public updateDynamicTexture(texture: Nullable<InternalTexture>, canvas: HTMLCanvasElement, invertY: boolean, premulAlpha: boolean = false, format?: number): void {
+        // TODO: Stub! This function is needed for some GLTF validation tests.
+        // Loads a dummy 8x8 transparent png
+        var imageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAYSURBVChTY/z//z8DPsAEpXGC4aCAgQEAGGMDDWwwgqsAAAAASUVORK5CYII=';
+        this.createTexture('data:my_image_name', true, invertY, null, Texture.BILINEAR_SAMPLINGMODE, undefined, undefined, imageData, texture, NativeEngine.TEXTUREFORMAT_RGBA, null, undefined);
+    }
+
+    public createRawTexture(data: Nullable<ArrayBufferView>, width: number, height: number, format: number, generateMipMaps: boolean, invertY: boolean, samplingMode: number, compression: Nullable<string> = null, type: number = Constants.TEXTURETYPE_UNSIGNED_INT): InternalTexture {
+        let texture = new InternalTexture(this, InternalTextureSource.Raw);
+
+        texture.generateMipMaps = generateMipMaps;
+        texture.samplingMode = samplingMode;
+        texture.invertY = invertY;
+        texture.baseWidth = width;
+        texture.baseHeight = height;
+        texture.width = texture.baseWidth;
+        texture.height = texture.baseHeight;
+        texture._compression = compression;
+        texture.type = type;
+
+        this.updateRawTexture(texture, data, format, invertY, compression, type);
+
+        if (texture._hardwareTexture) {
+            var webGLTexture = texture._hardwareTexture.underlyingResource;
+            var filter = this._getNativeSamplingMode(samplingMode);
+            this._native.setTextureSampling(webGLTexture, filter);
+        }
+
+        this._internalTexturesCache.push(texture);
+        return texture;
+    }
+
+    public updateRawTexture(texture: Nullable<InternalTexture>, bufferView: Nullable<ArrayBufferView>, format: number, invertY: boolean, compression: Nullable<string> = null, type: number = Constants.TEXTURETYPE_UNSIGNED_INT): void {
+        if (!texture) {
+            return;
+        }
+
+        if (bufferView && texture._hardwareTexture) {
+            const webGLTexture = texture._hardwareTexture.underlyingResource;
+            this._native.loadRawTexture(webGLTexture, bufferView, texture.width, texture.height, this._getNativeTextureFormat(format, type), texture.generateMipMaps, texture.invertY);
+        }
+
+        texture.isReady = true;
     }
 
     // TODO: Refactor to share more logic with babylon.engine.ts version.
     /**
      * Usually called from Texture.ts.
      * Passed information to create a WebGLTexture
-     * @param urlArg defines a value which contains one of the following:
+     * @param url defines a value which contains one of the following:
      * * A conventional http URL, e.g. 'http://...' or 'file://...'
      * * A base64 string of in-line texture data, e.g. 'data:image/jpg;base64,/...'
      * * An indicator that data being passed using the buffer parameter, e.g. 'data:mytexture.jpg'
@@ -866,17 +1581,24 @@ export class NativeEngine extends Engine {
      * @param format internal format.  Default: RGB when extension is '.jpg' else RGBA.  Ignored for compressed textures
      * @param forcedExtension defines the extension to use to pick the right loader
      * @param mimeType defines an optional mime type
+     * @param loaderOptions options to be passed to the loader
      * @returns a InternalTexture for assignment back into BABYLON.Texture
      */
-    public createTexture(urlArg: Nullable<string>, noMipmap: boolean, invertY: boolean, scene: Nullable<ISceneLike>, samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
+    public createTexture(url: Nullable<string>, noMipmap: boolean, invertY: boolean, scene: Nullable<ISceneLike>, samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
         onLoad: Nullable<() => void> = null, onError: Nullable<(message: string, exception: any) => void> = null,
         buffer: Nullable<string | ArrayBuffer | ArrayBufferView | HTMLImageElement | Blob | ImageBitmap> = null, fallback: Nullable<InternalTexture> = null, format: Nullable<number> = null,
-        forcedExtension: Nullable<string> = null, mimeType?: string): InternalTexture {
-        var url = String(urlArg); // assign a new string, so that the original is still available in case of fallback
-        var fromData = url.substr(0, 5) === "data:";
-        var fromBlob = url.substr(0, 5) === "blob:";
+        forcedExtension: Nullable<string> = null, mimeType?: string, loaderOptions?: any): InternalTexture {
+        url = url || "";
+        const fromData = url.substr(0, 5) === "data:";
+        //const fromBlob = url.substr(0, 5) === "blob:";
+        const isBase64 = fromData && url.indexOf(";base64,") !== -1;
 
         let texture = fallback ? fallback : new InternalTexture(this, InternalTextureSource.Url);
+
+        const originalUrl = url;
+        if (this._transformTextureUrl && !isBase64 && !fallback && !buffer) {
+            url = this._transformTextureUrl(url);
+        }
 
         // establish the file extension, if possible
         var lastDot = url.lastIndexOf('.');
@@ -915,54 +1637,32 @@ export class NativeEngine extends Engine {
                 scene._removePendingData(texture);
             }
 
-            if (onLoadObserver) {
-                texture.onLoadedObservable.remove(onLoadObserver);
-            }
-            if (Tools.UseFallbackTexture) {
-                this.createTexture(Tools.fallbackTexture, noMipmap, invertY, scene, samplingMode, null, onError, buffer, texture);
-            }
+            if (url === originalUrl) {
+                if (onLoadObserver) {
+                    texture.onLoadedObservable.remove(onLoadObserver);
+                }
 
-            if (onError) {
-                onError(message || "Unknown error", exception);
+                if (EngineStore.UseFallbackTexture) {
+                    this.createTexture(EngineStore.FallbackTexture, noMipmap, texture.invertY, scene, samplingMode, null, onError, buffer, texture);
+                }
+
+                if (onError) {
+                    onError((message || "Unknown error") + (EngineStore.UseFallbackTexture ? " - Fallback texture was used" : ""), exception);
+                }
+            }
+            else {
+                // fall back to the original url if the transformed url fails to load
+                Logger.Warn(`Failed to load ${url}, falling back to ${originalUrl}`);
+                this.createTexture(originalUrl, noMipmap, texture.invertY, scene, samplingMode, onLoad, onError, buffer, texture, format, forcedExtension, mimeType, loaderOptions);
             }
         };
 
         // processing for non-image formats
         if (loader) {
             throw new Error("Loading textures from IInternalTextureLoader not yet implemented.");
-            // var callback = (data: string | ArrayBuffer) => {
-            //     loader!.loadData(data as ArrayBuffer, texture, (width: number, height: number, loadMipmap: boolean, isCompressed: boolean, done: () => void) => {
-            //         this._prepareWebGLTexture(texture, scene, width, height, invertY, !loadMipmap, isCompressed, () => {
-            //                 done();
-            //                 return false;
-            //             },
-            //             samplingMode);
-            //     });
-            // }
-
-            // if (!buffer) {
-            //     this._loadFile(url, callback, undefined, scene ? scene.database : undefined, true, (request?: XMLHttpRequest, exception?: any) => {
-            //         onInternalError("Unable to load " + (request ? request.responseURL : url, exception));
-            //     });
-            // } else {
-            //     callback(buffer as ArrayBuffer);
-            // }
         } else {
-            var onload = (data: string | ArrayBuffer | Blob, responseURL?: string) => {
-                if (typeof (data) === "string") {
-                    throw new Error("Loading textures from string data not yet implemented.");
-                }
-
-                if (fromBlob && !this.doNotHandleContextLost) {
-                    // We need to store the image if we need to rebuild the texture
-                    // in case of a webgl context lost
-                    texture._buffer = data;
-                }
-
-                let webGLTexture = texture._webGLTexture;
-
-                if (!webGLTexture) {
-                    //  this.resetTextureCache();
+            const onload = (data: ArrayBufferView) => {
+                if (!texture._hardwareTexture) {
                     if (scene) {
                         scene._removePendingData(texture);
                     }
@@ -970,46 +1670,75 @@ export class NativeEngine extends Engine {
                     return;
                 }
 
-                if (!this._native.loadTexture(webGLTexture, data, !noMipmap, invertY)) {
+                const webGLTexture = texture._hardwareTexture.underlyingResource;
+
+                this._native.loadTexture(webGLTexture, data, !noMipmap, invertY, () => {
+                    texture.baseWidth = this._native.getTextureWidth(webGLTexture);
+                    texture.baseHeight = this._native.getTextureHeight(webGLTexture);
+                    texture.width = texture.baseWidth;
+                    texture.height = texture.baseHeight;
+                    texture.isReady = true;
+
+                    var filter = this._getNativeSamplingMode(samplingMode);
+                    this._native.setTextureSampling(webGLTexture, filter);
+
+                    if (scene) {
+                        scene._removePendingData(texture);
+                    }
+
+                    texture.onLoadedObservable.notifyObservers(texture);
+                    texture.onLoadedObservable.clear();
+                }, () => {
                     throw new Error("Could not load a native texture.");
-                }
-
-                texture.baseWidth = this._native.getTextureWidth(webGLTexture);
-                texture.baseHeight = this._native.getTextureHeight(webGLTexture);
-                texture.width = texture.baseWidth;
-                texture.height = texture.baseHeight;
-                texture.isReady = true;
-
-                var filter = this._getSamplingFilter(samplingMode);
-
-                this._native.setTextureSampling(webGLTexture, filter);
-
-                // this.resetTextureCache();
-                if (scene) {
-                    scene._removePendingData(texture);
-                }
-
-                texture.onLoadedObservable.notifyObservers(texture);
-                texture.onLoadedObservable.clear();
+                });
             };
 
-            if (buffer instanceof ArrayBuffer) {
-                onload(buffer);
-            } else if (ArrayBuffer.isView(buffer)) {
-                onload(buffer.buffer);
-            } else if (buffer instanceof Blob) {
-                throw new Error("Loading texture from Blob not yet implemented.");
-            } else if (!fromData) {
-                let onLoadFileError = (request?: WebRequest, exception?: any) => {
-                    onInternalError("Failed to retrieve " + url + ".", exception);
-                };
-                Tools.LoadFile(url, onload, undefined, undefined, /*useArrayBuffer*/true, onLoadFileError);
-            } else {
-                onload(Tools.DecodeBase64(buffer as string));
+            if (fromData) {
+                if (buffer instanceof ArrayBuffer) {
+                    onload(new Uint8Array(buffer));
+                } else if (ArrayBuffer.isView(buffer)) {
+                    onload(buffer);
+                } else if (typeof buffer === "string") {
+                    onload(new Uint8Array(Tools.DecodeBase64(buffer)));
+                } else {
+                    throw new Error("Unsupported buffer type");
+                }
+            }
+            else {
+                if (isBase64) {
+                    onload(new Uint8Array(Tools.DecodeBase64(url)));
+                }
+                else {
+                    this._loadFile(url, (data) => onload(new Uint8Array(data as ArrayBuffer)), undefined, undefined, true, (request?: IWebRequest, exception?: any) => {
+                        onInternalError("Unable to load " + (request ? request.responseURL : url, exception));
+                    });
+                }
             }
         }
 
         return texture;
+    }
+
+    _createDepthStencilTexture(size: RenderTargetTextureSize, options: DepthTextureCreationOptions): NativeTexture {
+        var texture = new NativeTexture(this, InternalTextureSource.Depth);
+
+        const width = (<{ width: number, height: number, layers?: number }>size).width || <number>size;
+        const height = (<{ width: number, height: number, layers?: number }>size).height || <number>size;
+
+        var framebuffer = this._native.createDepthTexture(
+            texture._hardwareTexture!.underlyingResource,
+            width,
+            height);
+
+        texture._framebuffer = framebuffer;
+        return texture;
+    }
+
+    public _releaseFramebufferObjects(texture: InternalTexture): void {
+        if (texture._framebuffer) {
+            this._native.deleteFramebuffer(texture._framebuffer);
+            texture._framebuffer = null;
+        }
     }
 
     /**
@@ -1084,15 +1813,17 @@ export class NativeEngine extends Engine {
                 texture.getEngine().updateTextureSamplingMode(Texture.TRILINEAR_SAMPLINGMODE, texture);
                 texture._isRGBD = true;
                 texture.invertY = true;
-                if (!this._native.loadCubeTextureWithMips(texture._webGLTexture!, imageData)) {
-                    throw new Error("Could not load a native cube texture.");
-                }
 
-                texture.isReady = true;
-                if (onLoad) {
-                    onLoad();
-                }
+                this._native.loadCubeTextureWithMips(texture._hardwareTexture!.underlyingResource, imageData, () => {
+                    texture.isReady = true;
+                    if (onLoad) {
+                        onLoad();
+                    }
+                }, () => {
+                    throw new Error("Could not load a native cube texture.");
+                });
             };
+
             if (files && files.length === 6) {
                 throw new Error(`Multi-file loading not allowed on env files.`);
             }
@@ -1114,7 +1845,9 @@ export class NativeEngine extends Engine {
             // Reorder from [+X, +Y, +Z, -X, -Y, -Z] to [+X, -X, +Y, -Y, +Z, -Z].
             const reorderedFiles = [files[0], files[3], files[1], files[4], files[2], files[5]];
             Promise.all(reorderedFiles.map((file) => Tools.LoadFileAsync(file).then((data) => new Uint8Array(data as ArrayBuffer)))).then((data) => {
-                this._native.loadCubeTexture(texture._webGLTexture!, data, !noMipmap);
+                return new Promise<void>((resolve, reject) => {
+                    this._native.loadCubeTexture(texture._hardwareTexture!.underlyingResource, data, !noMipmap, resolve, reject);
+                });
             }).then(() => {
                 texture.isReady = true;
                 if (onLoad) {
@@ -1130,50 +1863,6 @@ export class NativeEngine extends Engine {
         this._internalTexturesCache.push(texture);
 
         return texture;
-    }
-
-    // Returns a NativeFilter.XXXX value.
-    private _getSamplingFilter(samplingMode: number): number {
-        switch (samplingMode) {
-            case Constants.TEXTURE_BILINEAR_SAMPLINGMODE:
-                return NativeFilter.MINLINEAR_MAGLINEAR_MIPPOINT;
-            case Constants.TEXTURE_TRILINEAR_SAMPLINGMODE:
-                return NativeFilter.MINLINEAR_MAGLINEAR_MIPLINEAR;
-            case Constants.TEXTURE_NEAREST_SAMPLINGMODE:
-                return NativeFilter.MINPOINT_MAGPOINT_MIPLINEAR;
-            case Constants.TEXTURE_NEAREST_NEAREST_MIPNEAREST:
-                return NativeFilter.MINPOINT_MAGPOINT_MIPPOINT;
-            case Constants.TEXTURE_NEAREST_LINEAR_MIPNEAREST:
-                return NativeFilter.MINLINEAR_MAGPOINT_MIPPOINT;
-            case Constants.TEXTURE_NEAREST_LINEAR_MIPLINEAR:
-                return NativeFilter.MINLINEAR_MAGPOINT_MIPLINEAR;
-            case Constants.TEXTURE_NEAREST_LINEAR:
-                return NativeFilter.MINLINEAR_MAGPOINT_MIPLINEAR;
-            case Constants.TEXTURE_NEAREST_NEAREST:
-                return NativeFilter.MINPOINT_MAGPOINT_MIPPOINT;
-            case Constants.TEXTURE_LINEAR_NEAREST_MIPNEAREST:
-                return NativeFilter.MINPOINT_MAGLINEAR_MIPPOINT;
-            case Constants.TEXTURE_LINEAR_NEAREST_MIPLINEAR:
-                return NativeFilter.MINPOINT_MAGLINEAR_MIPLINEAR;
-            case Constants.TEXTURE_LINEAR_LINEAR:
-                return NativeFilter.MINLINEAR_MAGLINEAR_MIPLINEAR;
-            case Constants.TEXTURE_LINEAR_NEAREST:
-                return NativeFilter.MINPOINT_MAGLINEAR_MIPLINEAR;
-            default:
-                throw new Error("Unexpected sampling mode: " + samplingMode + ".");
-        }
-    }
-
-    private static _GetNativeTextureFormat(format: number, type: number): number {
-        if (format == Constants.TEXTUREFORMAT_RGBA && type == Constants.TEXTURETYPE_UNSIGNED_INT) {
-            return NativeTextureFormat.RGBA8;
-        }
-        else if (format == Constants.TEXTUREFORMAT_RGBA && type == Constants.TEXTURETYPE_FLOAT) {
-            return NativeTextureFormat.RGBA32F;
-        }
-        else {
-            throw new Error("Unexpected texture format or type: format " + format + ", type " + type + ".");
-        }
     }
 
     public createRenderTargetTexture(size: number | { width: number, height: number }, options: boolean | RenderTargetCreationOptions): NativeTexture {
@@ -1214,10 +1903,10 @@ export class NativeEngine extends Engine {
         }
 
         var framebuffer = this._native.createFramebuffer(
-            texture._webGLTexture!,
+            texture._hardwareTexture!.underlyingResource,
             width,
             height,
-            NativeEngine._GetNativeTextureFormat(fullOptions.format, fullOptions.type),
+            this._getNativeTextureFormat(fullOptions.format, fullOptions.type),
             fullOptions.samplingMode!,
             fullOptions.generateStencilBuffer ? true : false,
             fullOptions.generateDepthBuffer,
@@ -1243,9 +1932,9 @@ export class NativeEngine extends Engine {
     }
 
     public updateTextureSamplingMode(samplingMode: number, texture: InternalTexture): void {
-        if (texture._webGLTexture) {
-            var filter = this._getSamplingFilter(samplingMode);
-            this._native.setTextureSampling(texture._webGLTexture, filter);
+        if (texture._hardwareTexture) {
+            var filter = this._getNativeSamplingMode(samplingMode);
+            this._native.setTextureSampling(texture._hardwareTexture.underlyingResource, filter);
         }
         texture.samplingMode = samplingMode;
     }
@@ -1260,10 +1949,14 @@ export class NativeEngine extends Engine {
         }
 
         if (forceFullscreenViewport) {
-            throw new Error("forceFullscreenViewport for frame buffers not yet supported in NativeEngine.");
+            //Not supported yet but don't stop rendering
         }
 
-        this._bindUnboundFramebuffer(texture._framebuffer);
+        if (texture._depthStencilTexture) {
+            this._bindUnboundFramebuffer(texture._depthStencilTexture._framebuffer);
+        } else {
+            this._bindUnboundFramebuffer(texture._framebuffer);
+        }
     }
 
     public unBindFramebuffer(texture: InternalTexture, disableGenerateMipMaps = false, onBeforeUnbind?: () => void): void {
@@ -1279,11 +1972,14 @@ export class NativeEngine extends Engine {
     }
 
     public createDynamicVertexBuffer(data: DataArray): DataBuffer {
-        throw new Error("createDynamicVertexBuffer not yet implemented.");
+        return this.createVertexBuffer(data, true);
     }
 
     public updateDynamicIndexBuffer(indexBuffer: DataBuffer, indices: IndicesArray, offset: number = 0): void {
-        throw new Error("updateDynamicIndexBuffer not yet implemented.");
+        const buffer = indexBuffer as NativeDataBuffer;
+        const data = this._normalizeIndexData(indices);
+        buffer.is32Bits = (data.BYTES_PER_ELEMENT === 4);
+        this._native.updateDynamicIndexBuffer(buffer.nativeIndexBuffer, data, offset);
     }
 
     /**
@@ -1294,7 +1990,13 @@ export class NativeEngine extends Engine {
      * @param byteLength the byte length of the data (optional)
      */
     public updateDynamicVertexBuffer(vertexBuffer: DataBuffer, data: DataArray, byteOffset?: number, byteLength?: number): void {
-        throw new Error("updateDynamicVertexBuffer not yet implemented.");
+        const buffer = vertexBuffer as NativeDataBuffer;
+        const dataView = ArrayBuffer.isView(data) ? data : new Float32Array(data);
+        this._native.updateDynamicVertexBuffer(
+            buffer.nativeVertexBuffer,
+            dataView,
+            byteOffset ?? 0,
+            byteLength ?? dataView.byteLength);
     }
 
     // TODO: Refactor to share more logic with base Engine implementation.
@@ -1340,18 +2042,18 @@ export class NativeEngine extends Engine {
         this._activeChannel = channel;
 
         if (!internalTexture ||
-            !internalTexture._webGLTexture) {
+            !internalTexture._hardwareTexture) {
             return false;
         }
 
         this._native.setTextureWrapMode(
-            internalTexture._webGLTexture,
+            internalTexture._hardwareTexture.underlyingResource,
             this._getAddressMode(texture.wrapU),
             this._getAddressMode(texture.wrapV),
             this._getAddressMode(texture.wrapR));
         this._updateAnisotropicLevel(texture);
 
-        this._native.setTexture(uniform, internalTexture._webGLTexture);
+        this._native.setTexture(uniform, internalTexture._hardwareTexture.underlyingResource);
 
         return true;
     }
@@ -1362,12 +2064,12 @@ export class NativeEngine extends Engine {
         var internalTexture = texture.getInternalTexture();
         var value = texture.anisotropicFilteringLevel;
 
-        if (!internalTexture || !internalTexture._webGLTexture) {
+        if (!internalTexture || !internalTexture._hardwareTexture) {
             return;
         }
 
         if (internalTexture._cachedAnisotropicFilteringLevel !== value) {
-            this._native.setTextureAnisotropicLevel(internalTexture._webGLTexture, value);
+            this._native.setTextureAnisotropicLevel(internalTexture._hardwareTexture.underlyingResource, value);
             internalTexture._cachedAnisotropicFilteringLevel = value;
         }
     }
@@ -1376,11 +2078,11 @@ export class NativeEngine extends Engine {
     private _getAddressMode(wrapMode: number): number {
         switch (wrapMode) {
             case Constants.TEXTURE_WRAP_ADDRESSMODE:
-                return NativeAddressMode.WRAP;
+                return this._native.ADDRESS_MODE_WRAP;
             case Constants.TEXTURE_CLAMP_ADDRESSMODE:
-                return NativeAddressMode.CLAMP;
+                return this._native.ADDRESS_MODE_CLAMP;
             case Constants.TEXTURE_MIRROR_ADDRESSMODE:
-                return NativeAddressMode.MIRROR;
+                return this._native.ADDRESS_MODE_MIRROR;
             default:
                 throw new Error("Unexpected wrap mode: " + wrapMode + ".");
         }
@@ -1388,7 +2090,11 @@ export class NativeEngine extends Engine {
 
     /** @hidden */
     public _bindTexture(channel: number, texture: InternalTexture): void {
-        throw new Error("_bindTexture not implemented.");
+        let uniform = this._boundUniforms[channel];
+        if (!uniform) {
+            return ;
+        }
+        this._native.setTexture(uniform, texture._hardwareTexture?.underlyingResource);
     }
 
     protected _deleteBuffer(buffer: NativeDataBuffer): void {
@@ -1425,5 +2131,95 @@ export class NativeEngine extends Engine {
     /** @hidden */
     public _uploadImageToTexture(texture: InternalTexture, image: HTMLImageElement, faceIndex: number = 0, lod: number = 0) {
         throw new Error("_uploadArrayBufferViewToTexture not implemented.");
+    }
+
+    // JavaScript-to-Native conversion helper functions.
+
+    private _getNativeSamplingMode(samplingMode: number): number {
+        switch (samplingMode) {
+            case Constants.TEXTURE_NEAREST_NEAREST:
+                return this._native.TEXTURE_NEAREST_NEAREST;
+            case Constants.TEXTURE_LINEAR_LINEAR:
+                return this._native.TEXTURE_LINEAR_LINEAR;
+            case Constants.TEXTURE_LINEAR_LINEAR_MIPLINEAR:
+                return this._native.TEXTURE_LINEAR_LINEAR_MIPLINEAR;
+            case Constants.TEXTURE_NEAREST_NEAREST_MIPNEAREST:
+                return this._native.TEXTURE_NEAREST_NEAREST_MIPNEAREST;
+            case Constants.TEXTURE_NEAREST_LINEAR_MIPNEAREST:
+                return this._native.TEXTURE_NEAREST_LINEAR_MIPNEAREST;
+            case Constants.TEXTURE_NEAREST_LINEAR_MIPLINEAR:
+                return this._native.TEXTURE_NEAREST_LINEAR_MIPLINEAR;
+            case Constants.TEXTURE_NEAREST_LINEAR:
+                return this._native.TEXTURE_NEAREST_LINEAR;
+            case Constants.TEXTURE_NEAREST_NEAREST_MIPLINEAR:
+                return this._native.TEXTURE_NEAREST_NEAREST_MIPLINEAR;
+            case Constants.TEXTURE_LINEAR_NEAREST_MIPNEAREST:
+                return this._native.TEXTURE_LINEAR_NEAREST_MIPNEAREST;
+            case Constants.TEXTURE_LINEAR_NEAREST_MIPLINEAR:
+                return this._native.TEXTURE_LINEAR_NEAREST_MIPLINEAR;
+            case Constants.TEXTURE_LINEAR_LINEAR_MIPNEAREST:
+                return this._native.TEXTURE_LINEAR_LINEAR_MIPNEAREST;
+            case Constants.TEXTURE_LINEAR_NEAREST:
+                return this._native.TEXTURE_LINEAR_NEAREST;
+            default:
+                throw new Error(`Unsupported sampling mode: ${samplingMode}.`);
+        }
+    }
+
+    private _getNativeTextureFormat(format: number, type: number): number {
+        if (format == Constants.TEXTUREFORMAT_RGB && type == Constants.TEXTURETYPE_UNSIGNED_INT) {
+            return this._native.TEXTURE_FORMAT_RGB8;
+        }
+        else if (format == Constants.TEXTUREFORMAT_RGBA && type == Constants.TEXTURETYPE_UNSIGNED_INT) {
+            return this._native.TEXTURE_FORMAT_RGBA8;
+        }
+        else if (format == Constants.TEXTUREFORMAT_RGBA && type == Constants.TEXTURETYPE_FLOAT) {
+            return this._native.TEXTURE_FORMAT_RGBA32F;
+        }
+        else {
+            throw new Error(`Unsupported texture format or type: format ${format}, type ${type}.`);
+        }
+    }
+
+    private _getNativeAlphaMode(mode: number): number {
+        switch (mode) {
+            case Constants.ALPHA_DISABLE:
+                return this._native.ALPHA_DISABLE;
+            case Constants.ALPHA_ADD:
+                return this._native.ALPHA_ADD;
+            case Constants.ALPHA_COMBINE:
+                return this._native.ALPHA_COMBINE;
+            case Constants.ALPHA_SUBTRACT:
+                return this._native.ALPHA_SUBTRACT;
+            case Constants.ALPHA_MULTIPLY:
+                return this._native.ALPHA_MULTIPLY;
+            case Constants.ALPHA_MAXIMIZED:
+                return this._native.ALPHA_MAXIMIZED;
+            case Constants.ALPHA_ONEONE:
+                return this._native.ALPHA_ONEONE;
+            case Constants.ALPHA_PREMULTIPLIED:
+                return this._native.ALPHA_PREMULTIPLIED;
+            case Constants.ALPHA_PREMULTIPLIED_PORTERDUFF:
+                return this._native.ALPHA_PREMULTIPLIED_PORTERDUFF;
+            case Constants.ALPHA_INTERPOLATE:
+                return this._native.ALPHA_INTERPOLATE;
+            case Constants.ALPHA_SCREENMODE:
+                return this._native.ALPHA_SCREENMODE;
+            default:
+                throw new Error(`Unsupported alpha mode: ${mode}.`);
+        }
+    }
+
+    private _getNativeAttribType(type: number): number {
+        switch (type) {
+            case VertexBuffer.UNSIGNED_BYTE:
+                return this._native.ATTRIB_TYPE_UINT8;
+            case VertexBuffer.SHORT:
+                return this._native.ATTRIB_TYPE_INT16;
+            case VertexBuffer.FLOAT:
+                return this._native.ATTRIB_TYPE_FLOAT;
+            default:
+                throw new Error(`Unsupported attribute type: ${type}.`);
+        }
     }
 }

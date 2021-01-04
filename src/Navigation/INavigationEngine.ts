@@ -14,7 +14,7 @@ export interface INavigationEnginePlugin {
 
     /**
      * Creates a navigation mesh
-     * @param meshes array of all the geometry used to compute the navigatio mesh
+     * @param meshes array of all the geometry used to compute the navigation mesh
      * @param parameters bunch of parameters used to filter geometry
      */
     createNavMesh(meshes: Array<Mesh>, parameters: INavMeshParameters): void;
@@ -128,6 +128,35 @@ export interface INavigationEnginePlugin {
     getDefaultQueryExtentToRef(result: Vector3): void;
 
     /**
+     * Set the time step of the navigation tick update.
+     * Default is 1/60.
+     * A value of 0 will disable fixed time update
+     * @param newTimeStep the new timestep to apply to this world.
+     */
+    setTimeStep(newTimeStep: number): void;
+
+    /**
+     * Get the time step of the navigation tick update.
+     * @returns the current time step
+     */
+    getTimeStep(): number;
+
+    /**
+     * If delta time in navigation tick update is greater than the time step
+     * a number of sub iterations are done. If more iterations are need to reach deltatime
+     * they will be discarded.
+     * A value of 0 will set to no maximum and update will use as many substeps as needed
+     * @param newStepCount the maximum number of iterations
+     */
+    setMaximumSubStepCount(newStepCount: number): void;
+
+    /**
+     * Get the maximum number of iterations per navigation tick update
+     * @returns the maximum number of iterations
+     */
+    getMaximumSubStepCount(): number;
+
+    /**
      * Release all resources
      */
     dispose(): void;
@@ -174,6 +203,34 @@ export interface ICrowd {
      * @param result output world space velocity
      */
     getAgentVelocityToRef(index: number, result: Vector3): void;
+
+    /**
+     * Gets the agent next target point on the path
+     * @param index agent index returned by addAgent
+     * @returns world space position
+     */
+    getAgentNextTargetPath(index: number): Vector3;
+
+    /**
+     * Gets the agent state
+     * @param index agent index returned by addAgent
+     * @returns agent state
+     */
+    getAgentState(index: number): number;
+
+    /**
+     * returns true if the agent in over an off mesh link connection
+     * @param index agent index returned by addAgent
+     * @returns true if over an off mesh link connection
+     */
+    overOffmeshConnection(index: number): boolean;
+
+    /**
+     * Gets the agent next target point on the path
+     * @param index agent index returned by addAgent
+     * @param result output world space position
+     */
+    getAgentNextTargetPathToRef(index: number, result: Vector3): void;
 
     /**
      * remove a particular agent previously created
@@ -275,7 +332,7 @@ export interface IAgentParameters {
     pathOptimizationRange: number;
 
     /**
-     * How aggresive the agent manager should be at avoiding collisions with this agent. [Limit: >= 0]
+     * How aggressive the agent manager should be at avoiding collisions with this agent. [Limit: >= 0]
      */
     separationWeight: number;
 }
@@ -322,7 +379,7 @@ export interface INavMeshParameters {
     maxEdgeLen: number;
 
     /**
-     * The maximum distance a simplfied contour's border edges should deviate
+     * The maximum distance a simplified contour's border edges should deviate
      * the original raw contour. [Limit: >=0] [Units: vx]
      */
     maxSimplificationError: number;

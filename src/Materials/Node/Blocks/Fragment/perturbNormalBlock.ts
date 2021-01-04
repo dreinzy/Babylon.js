@@ -10,19 +10,23 @@ import { InputBlock } from '../Input/inputBlock';
 import { Effect } from '../../../effect';
 import { Mesh } from '../../../../Meshes/mesh';
 import { Scene } from '../../../../scene';
+import { editableInPropertyPage, PropertyTypeForEdition } from "../../nodeMaterialDecorator";
 
+import "../../../../Shaders/ShadersInclude/bumpFragmentMainFunctions";
 import "../../../../Shaders/ShadersInclude/bumpFragmentFunctions";
 import "../../../../Shaders/ShadersInclude/bumpFragment";
 
 /**
- * Block used to pertub normals based on a normal map
+ * Block used to perturb normals based on a normal map
  */
 export class PerturbNormalBlock extends NodeMaterialBlock {
     private _tangentSpaceParameterName = "";
 
     /** Gets or sets a boolean indicating that normal should be inverted on X axis */
+    @editableInPropertyPage("Invert X axis", PropertyTypeForEdition.Boolean, "PROPERTIES", { "notifiers": { "update": false }})
     public invertX = false;
     /** Gets or sets a boolean indicating that normal should be inverted on Y axis */
+    @editableInPropertyPage("Invert Y axis", PropertyTypeForEdition.Boolean, "PROPERTIES", { "notifiers": { "update": false }})
     public invertY = false;
 
     /**
@@ -160,12 +164,19 @@ export class PerturbNormalBlock extends NodeMaterialBlock {
             state.compilationString += `mat3 vTBN = mat3(tbnTangent, tbnBitangent, tbnNormal);\r\n`;
         }
 
+        state._emitFunctionFromInclude("bumpFragmentMainFunctions", comments, {
+            replaceStrings: [
+                tangentReplaceString,
+            ]
+        });
+
         state._emitFunctionFromInclude("bumpFragmentFunctions", comments, {
             replaceStrings: [
                 { search: /vBumpInfos.y/g, replace: replaceForBumpInfos},
                 { search: /vTangentSpaceParams/g, replace: this._tangentSpaceParameterName},
                 { search: /vPositionW/g, replace: worldPosition.associatedVariableName + ".xyz"},
-                tangentReplaceString
+                { search: /varying vec2 vBumpUV;/g, replace: ""},
+                { search: /uniform sampler2D bumpSampler;[\s\S]*?\}/g, replace: ""},
             ]
         });
 
@@ -177,6 +188,7 @@ export class PerturbNormalBlock extends NodeMaterialBlock {
                 { search: /vBumpUV/g, replace: uv.associatedVariableName},
                 { search: /vPositionW/g, replace: worldPosition.associatedVariableName + ".xyz"},
                 { search: /normalW=/g, replace: this.output.associatedVariableName + ".xyz = " },
+                { search: /mat3\(normalMatrix\)\*normalW/g, replace: "mat3(normalMatrix) * " + this.output.associatedVariableName + ".xyz" },
                 { search: /normalW/g, replace: worldNormal.associatedVariableName + ".xyz" },
                 tangentReplaceString
             ]

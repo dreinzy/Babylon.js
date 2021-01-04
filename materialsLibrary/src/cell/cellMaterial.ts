@@ -43,6 +43,7 @@ class CellMaterialDefines extends MaterialDefines {
     public CUSTOMUSERLIGHTING = true;
     public CELLBASIC = true;
     public DEPTHPREPASS = false;
+    public IMAGEPROCESSINGPOSTPROCESS = false;
 
     constructor() {
         super();
@@ -73,8 +74,6 @@ export class CellMaterial extends PushMaterial {
     private _maxSimultaneousLights = 4;
     @expandToProperty("_markAllSubMeshesAsLightsDirty")
     public maxSimultaneousLights: number;
-
-    private _renderId: number;
 
     constructor(name: string, scene: Scene) {
         super(name, scene);
@@ -107,10 +106,8 @@ export class CellMaterial extends PushMaterial {
         var defines = <CellMaterialDefines>subMesh._materialDefines;
         var scene = this.getScene();
 
-        if (!this.checkReadyOnEveryCall && subMesh.effect) {
-            if (this._renderId === scene.getRenderId()) {
-                return true;
-            }
+        if (this._isReadyForSubMesh(subMesh)) {
+            return true;
         }
 
         var engine = scene.getEngine();
@@ -161,6 +158,8 @@ export class CellMaterial extends PushMaterial {
             if (defines.NUM_BONE_INFLUENCERS > 0) {
                 fallbacks.addCPUSkinningFallback(0, mesh);
             }
+
+            defines.IMAGEPROCESSINGPOSTPROCESS = scene.imageProcessingConfiguration.applyByPostProcess;
 
             //Attributes
             var attribs = [VertexBuffer.PositionKind];
@@ -220,7 +219,7 @@ export class CellMaterial extends PushMaterial {
             return false;
         }
 
-        this._renderId = scene.getRenderId();
+        defines._renderId = scene.getRenderId();
         subMesh.effect._wasPreviouslyReady = true;
 
         return true;

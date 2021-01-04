@@ -153,8 +153,20 @@ export class MirrorTexture extends RenderTargetTexture {
 
         this._updateGammaSpace();
         this._imageProcessingConfigChangeObserver = scene.imageProcessingConfiguration.onUpdateParameters.add(() => {
-            this._updateGammaSpace;
+            this._updateGammaSpace();
         });
+
+        const engine = this.getScene()!.getEngine();
+
+        this.onBeforeBindObservable.add(() => {
+            engine._debugPushGroup(`mirror generation for ${name}`, 1);
+        });
+
+        this.onAfterUnbindObservable.add(() => {
+            engine._debugPopGroup(1);
+        });
+
+        let saveClipPlane: Nullable<Plane>;
 
         this.onBeforeRenderObservable.add(() => {
             Matrix.ReflectionToRef(this.mirrorPlane, this._mirrorMatrix);
@@ -164,6 +176,7 @@ export class MirrorTexture extends RenderTargetTexture {
 
             scene.setTransformMatrix(this._transformMatrix, scene.getProjectionMatrix());
 
+            saveClipPlane = scene.clipPlane;
             scene.clipPlane = this.mirrorPlane;
 
             scene.getEngine().cullBackFaces = false;
@@ -176,7 +189,7 @@ export class MirrorTexture extends RenderTargetTexture {
             scene.getEngine().cullBackFaces = true;
             scene._mirroredCameraPosition = null;
 
-            scene.clipPlane = null;
+            scene.clipPlane = saveClipPlane;
         });
     }
 

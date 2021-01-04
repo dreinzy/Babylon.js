@@ -5,6 +5,7 @@ import { NodeMaterialConnectionPoint } from '../nodeMaterialBlockConnectionPoint
 import { NodeMaterialBlockTargets } from '../Enums/nodeMaterialBlockTargets';
 import { _TypeStore } from '../../../Misc/typeStore';
 import { Scene } from '../../../scene';
+import { editableInPropertyPage, PropertyTypeForEdition } from "../nodeMaterialDecorator";
 
 /**
  * block used to Generate a Worley Noise 3D Noise Pattern
@@ -18,6 +19,7 @@ import { Scene } from '../../../scene';
 
 export class WorleyNoise3DBlock extends NodeMaterialBlock {
     /** Gets or sets a boolean indicating that normal should be inverted on X axis */
+    @editableInPropertyPage("Use Manhattan Distance", PropertyTypeForEdition.Boolean, "PROPERTIES", { "notifiers": { "update": false }})
     public manhattanDistance = false;
 
     /**
@@ -238,7 +240,7 @@ export class WorleyNoise3DBlock extends NodeMaterialBlock {
         return codeString;
     }
     /**
-     * Exposes the properties to the Seralize?
+     * Exposes the properties to the Serialize?
      */
     public serialize(): any {
         let serializationObject = super.serialize();
@@ -248,7 +250,7 @@ export class WorleyNoise3DBlock extends NodeMaterialBlock {
         return serializationObject;
     }
     /**
-     * Exposes the properties to the deseralize?
+     * Exposes the properties to the deserialize?
      */
     public _deserialize(serializationObject: any, scene: Scene, rootUrl: string) {
         super._deserialize(serializationObject, scene, rootUrl);

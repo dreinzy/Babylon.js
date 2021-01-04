@@ -2,6 +2,7 @@ import * as React from "react";
 import { Observable } from "babylonjs/Misc/observable";
 import { PropertyChangedEvent } from "../../propertyChangedEvent";
 import { Tools } from 'babylonjs/Misc/tools';
+import { FloatLineComponent } from './floatLineComponent';
 
 interface ISliderLineComponentProps {
     label: string;
@@ -14,9 +15,9 @@ interface ISliderLineComponentProps {
     useEuler?: boolean;
     onChange?: (value: number) => void;
     onInput?: (value: number) => void;    
-    replaySourceReplacement?: string;
     onPropertyChangedObservable?: Observable<PropertyChangedEvent>;
     decimalCount?: number;
+    margin?: boolean;
 }
 
 export class SliderLineComponent extends React.Component<ISliderLineComponentProps, { value: number }> {
@@ -49,7 +50,7 @@ export class SliderLineComponent extends React.Component<ISliderLineComponentPro
             currentState = nextProps.maximum;
         }
 
-        if (currentState !== nextState.value || this._localChange) {
+        if (currentState !== nextState.value || this._localChange || nextProps.maximum !== this.props.maximum || nextProps.minimum !== this.props.minimum) {
             nextState.value = currentState;
             this._localChange = false;
             return true;
@@ -68,7 +69,7 @@ export class SliderLineComponent extends React.Component<ISliderLineComponentPro
         if (this.props.target) {
             if (this.props.onPropertyChangedObservable) {
                 this.props.onPropertyChangedObservable.notifyObservers({
-                    object: this.props.replaySourceReplacement ?? this.props.target,
+                    object: this.props.target,
                     property: this.props.propertyName!,
                     value: newValue,
                     initialValue: this.state.value
@@ -93,6 +94,10 @@ export class SliderLineComponent extends React.Component<ISliderLineComponentPro
     }
 
     prepareDataToRead(value: number) {
+        if (value === null) {
+            value = 0;
+        }
+
         if (this.props.useEuler) {
             return Tools.ToDegrees(value);
         }
@@ -101,14 +106,21 @@ export class SliderLineComponent extends React.Component<ISliderLineComponentPro
     }
 
     render() {
-        let decimalCount = this.props.decimalCount !== undefined ? this.props.decimalCount : 2;
+
         return (
             <div className="sliderLine">
-                <div className="label">
+                <div className={this.props.margin ? "label withMargins" : "label"}  title={this.props.label}>
                     {this.props.label}
                 </div>
+                <FloatLineComponent smallUI={true} label="" target={this.state} digits={this.props.decimalCount === undefined ? 4 : this.props.decimalCount} propertyName="value" min={this.props.minimum} max={this.props.maximum}
+                    onEnter={ () => { 
+                        var changed = this.prepareDataToRead(this.state.value); this.onChange(changed);
+                    }
+                } 
+                onChange={evt => {var changed = this.prepareDataToRead(this.state.value); this.onChange(changed)}} > 
+                </FloatLineComponent>
                 <div className="slider">
-                    {this.state.value ? this.prepareDataToRead(this.state.value).toFixed(decimalCount) : "0"}&nbsp;<input className="range" type="range" step={this.props.step} min={this.prepareDataToRead(this.props.minimum)} max={this.prepareDataToRead(this.props.maximum)} value={this.prepareDataToRead(this.state.value)}
+                    <input className="range" type="range" step={this.props.step} min={this.prepareDataToRead(this.props.minimum)} max={this.prepareDataToRead(this.props.maximum)} value={this.prepareDataToRead(this.state.value)}
                         onInput={evt => this.onInput((evt.target as HTMLInputElement).value)}
                         onChange={evt => this.onChange(evt.target.value)} />
                 </div>

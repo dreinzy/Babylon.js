@@ -1,6 +1,6 @@
 import * as React from "react";
 import { PaneComponent, IPaneComponentProps } from "../paneComponent";
-import { TextLineComponent } from "../lines/textLineComponent";
+import { TextLineComponent } from "../../../sharedUiComponents/lines/textLineComponent";
 import { LineContainerComponent } from "../lineContainerComponent";
 
 import { Nullable } from "babylonjs/types";
@@ -8,8 +8,8 @@ import { EngineInstrumentation } from "babylonjs/Instrumentation/engineInstrumen
 import { SceneInstrumentation } from "babylonjs/Instrumentation/sceneInstrumentation";
 import { Engine } from "babylonjs/Engines/engine";
 
-import { ValueLineComponent } from "../lines/valueLineComponent";
-import { BooleanLineComponent } from "../lines/booleanLineComponent";
+import { ValueLineComponent } from "../../../sharedUiComponents/lines/valueLineComponent";
+import { BooleanLineComponent } from "../../../sharedUiComponents/lines/booleanLineComponent";
 
 export class StatisticsTabComponent extends PaneComponent {
     private _sceneInstrumentation: Nullable<SceneInstrumentation>;
@@ -101,7 +101,8 @@ export class StatisticsTabComponent extends PaneComponent {
                 </LineContainerComponent>
                 <LineContainerComponent globalState={this.props.globalState} title="SYSTEM INFO">
                     <TextLineComponent label="Resolution" value={engine.getRenderWidth() + "x" + engine.getRenderHeight()} />
-                    <TextLineComponent label="WebGL version" value={engine.webGLVersion.toString()} />
+                    <TextLineComponent label="Hardware scaling level" value={engine.getHardwareScalingLevel().toString()} />
+                    <TextLineComponent label="Engine" value={engine.description} />
                     <BooleanLineComponent label="Std derivatives" value={caps.standardDerivatives} />
                     <BooleanLineComponent label="Compressed textures" value={caps.s3tc !== undefined} />
                     <BooleanLineComponent label="Hardware instances" value={caps.instancedArrays} />

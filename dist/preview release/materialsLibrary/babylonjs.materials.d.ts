@@ -23,7 +23,6 @@ declare module BABYLON {
         disableLighting: boolean;
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaTesting(): boolean;
@@ -61,6 +60,7 @@ declare module BABYLON {
         Vertex_MainBegin: string;
         Vertex_Before_PositionUpdated: string;
         Vertex_Before_NormalUpdated: string;
+        Vertex_After_WorldPosComputed: string;
         Vertex_MainEnd: string;
     }
     export class CustomMaterial extends BABYLON.StandardMaterial {
@@ -70,14 +70,18 @@ declare module BABYLON {
         _createdShaderName: string;
         _customUniform: string[];
         _newUniforms: string[];
-        _newUniformInstances: any[];
-        _newSamplerInstances: BABYLON.Texture[];
+        _newUniformInstances: {
+            [name: string]: any;
+        };
+        _newSamplerInstances: {
+            [name: string]: BABYLON.Texture;
+        };
         _customAttributes: string[];
         FragmentShader: string;
         VertexShader: string;
         AttachAfterBind(mesh: BABYLON.Mesh, effect: BABYLON.Effect): void;
         ReviewUniform(name: string, arr: string[]): string[];
-        Builder(shaderName: string, uniforms: string[], uniformBuffers: string[], samplers: string[], defines: BABYLON.StandardMaterialDefines, attributes?: string[]): string;
+        Builder(shaderName: string, uniforms: string[], uniformBuffers: string[], samplers: string[], defines: BABYLON.MaterialDefines | string[], attributes?: string[]): string;
         constructor(name: string, scene: BABYLON.Scene);
         AddUniform(name: string, kind: string, param: any): CustomMaterial;
         AddAttribute(name: string): CustomMaterial;
@@ -94,6 +98,7 @@ declare module BABYLON {
         Vertex_MainBegin(shaderPart: string): CustomMaterial;
         Vertex_Before_PositionUpdated(shaderPart: string): CustomMaterial;
         Vertex_Before_NormalUpdated(shaderPart: string): CustomMaterial;
+        Vertex_After_WorldPosComputed(shaderPart: string): CustomMaterial;
         Vertex_MainEnd(shaderPart: string): CustomMaterial;
     }
 }
@@ -115,6 +120,7 @@ declare module BABYLON {
         Vertex_MainBegin: string;
         Vertex_Before_PositionUpdated: string;
         Vertex_Before_NormalUpdated: string;
+        Vertex_After_WorldPosComputed: string;
         Vertex_MainEnd: string;
     }
     export class PBRCustomMaterial extends BABYLON.PBRMaterial {
@@ -124,14 +130,18 @@ declare module BABYLON {
         _createdShaderName: string;
         _customUniform: string[];
         _newUniforms: string[];
-        _newUniformInstances: any[];
-        _newSamplerInstances: BABYLON.Texture[];
+        _newUniformInstances: {
+            [name: string]: any;
+        };
+        _newSamplerInstances: {
+            [name: string]: BABYLON.Texture;
+        };
         _customAttributes: string[];
         FragmentShader: string;
         VertexShader: string;
         AttachAfterBind(mesh: BABYLON.Mesh, effect: BABYLON.Effect): void;
         ReviewUniform(name: string, arr: string[]): string[];
-        Builder(shaderName: string, uniforms: string[], uniformBuffers: string[], samplers: string[], defines: BABYLON.PBRMaterialDefines, attributes?: string[]): string;
+        Builder(shaderName: string, uniforms: string[], uniformBuffers: string[], samplers: string[], defines: BABYLON.MaterialDefines | string[], attributes?: string[], options?: BABYLON.ICustomShaderNameResolveOptions): string;
         constructor(name: string, scene: BABYLON.Scene);
         AddUniform(name: string, kind: string, param: any): PBRCustomMaterial;
         AddAttribute(name: string): PBRCustomMaterial;
@@ -150,6 +160,7 @@ declare module BABYLON {
         Vertex_MainBegin(shaderPart: string): PBRCustomMaterial;
         Vertex_Before_PositionUpdated(shaderPart: string): PBRCustomMaterial;
         Vertex_Before_NormalUpdated(shaderPart: string): PBRCustomMaterial;
+        Vertex_After_WorldPosComputed(shaderPart: string): PBRCustomMaterial;
         Vertex_MainEnd(shaderPart: string): PBRCustomMaterial;
     }
 }
@@ -178,7 +189,6 @@ declare module BABYLON {
         diffuseColor: BABYLON.Color3;
         speed: number;
         private _scaledDiffuse;
-        private _renderId;
         private _lastTime;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
@@ -233,7 +243,6 @@ declare module BABYLON {
         maxSimultaneousLights: number;
         highLevelFur: boolean;
         _meshes: BABYLON.AbstractMesh[];
-        private _renderId;
         private _furTime;
         constructor(name: string, scene: BABYLON.Scene);
         get furTime(): number;
@@ -283,7 +292,6 @@ declare module BABYLON {
         smoothness: number;
         private _disableLighting;
         disableLighting: boolean;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaTesting(): boolean;
@@ -353,7 +361,6 @@ declare module BABYLON {
         private _opacityTexture;
         opacityTexture: BABYLON.BaseTexture;
         private _gridControl;
-        private _renderId;
         /**
          * constructor
          * @param name The name given to the material in order to identify it afterwards.
@@ -411,7 +418,6 @@ declare module BABYLON {
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
         private _scaledDiffuse;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaTesting(): boolean;
@@ -480,7 +486,6 @@ declare module BABYLON {
         disableLighting: boolean;
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaTesting(): boolean;
@@ -520,7 +525,6 @@ declare module BABYLON {
         disableLighting: boolean;
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaBlendingForMesh(mesh: BABYLON.AbstractMesh): boolean;
@@ -554,8 +558,8 @@ declare module BABYLON {
 }
 declare module BABYLON {
     export class ShadowOnlyMaterial extends BABYLON.PushMaterial {
-        private _renderId;
         private _activeLight;
+        private _needAlphaBlending;
         constructor(name: string, scene: BABYLON.Scene);
         shadowColor: BABYLON.Color3;
         needAlphaBlending(): boolean;
@@ -563,6 +567,7 @@ declare module BABYLON {
         getAlphaTestTexture(): BABYLON.Nullable<BABYLON.BaseTexture>;
         get activeLight(): BABYLON.IShadowLight;
         set activeLight(light: BABYLON.IShadowLight);
+        private _getFirstShadowLightForMesh;
         isReadyForSubMesh(mesh: BABYLON.AbstractMesh, subMesh: BABYLON.SubMesh, useInstances?: boolean): boolean;
         bindForSubMesh(world: BABYLON.Matrix, mesh: BABYLON.Mesh, subMesh: BABYLON.SubMesh): void;
         clone(name: string): ShadowOnlyMaterial;
@@ -594,7 +599,6 @@ declare module BABYLON {
         disableLighting: boolean;
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaTesting(): boolean;
@@ -680,8 +684,12 @@ declare module BABYLON {
          * @example skyMaterial.cameraOffset.y = camera.globalPosition.y // Set horizon relative to 0 on the Y axis
          */
         cameraOffset: BABYLON.Vector3;
+        /**
+         * Defines the vector the skyMaterial should consider as up. (default is BABYLON.Vector3(0, 1, 0) as returned by BABYLON.Vector3.Up())
+         */
+        up: BABYLON.Vector3;
         private _cameraPosition;
-        private _renderId;
+        private _skyOrientation;
         /**
          * Instantiates a new sky material.
          * This material allows to create dynamic and texture free
@@ -796,7 +804,6 @@ declare module BABYLON {
         disableLighting: boolean;
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaTesting(): boolean;
@@ -850,7 +857,6 @@ declare module BABYLON {
         disableLighting: boolean;
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
-        private _renderId;
         constructor(name: string, scene: BABYLON.Scene);
         needAlphaBlending(): boolean;
         needAlphaTesting(): boolean;
@@ -894,60 +900,64 @@ declare module BABYLON {
         private _maxSimultaneousLights;
         maxSimultaneousLights: number;
         /**
-        * @param {number}: Represents the wind force
-        */
+         * Defines the wind force.
+         */
         windForce: number;
         /**
-        * @param {Vector2}: The direction of the wind in the plane (X, Z)
-        */
+         * Defines the direction of the wind in the plane (X, Z).
+         */
         windDirection: BABYLON.Vector2;
         /**
-        * @param {number}: Wave height, represents the height of the waves
-        */
+         * Defines the height of the waves.
+         */
         waveHeight: number;
         /**
-        * @param {number}: Bump height, represents the bump height related to the bump map
-        */
+         * Defines the bump height related to the bump map.
+         */
         bumpHeight: number;
         /**
-         * @param {boolean}: Add a smaller moving bump to less steady waves.
+         * Defines wether or not: to add a smaller moving bump to less steady waves.
          */
         private _bumpSuperimpose;
         bumpSuperimpose: boolean;
         /**
-         * @param {boolean}: Color refraction and reflection differently with .waterColor2 and .colorBlendFactor2. Non-linear (physically correct) fresnel.
+         * Defines wether or not color refraction and reflection differently with .waterColor2 and .colorBlendFactor2. Non-linear (physically correct) fresnel.
          */
         private _fresnelSeparate;
         fresnelSeparate: boolean;
         /**
-         * @param {boolean}: bump Waves modify the reflection.
+         * Defines wether or not bump Wwves modify the reflection.
          */
         private _bumpAffectsReflection;
         bumpAffectsReflection: boolean;
         /**
-        * @param {number}: The water color blended with the refraction (near)
-        */
+         * Defines the water color blended with the refraction (near).
+         */
         waterColor: BABYLON.Color3;
         /**
-        * @param {number}: The blend factor related to the water color
-        */
+         * Defines the blend factor related to the water color.
+         */
         colorBlendFactor: number;
         /**
-         * @param {number}: The water color blended with the reflection (far)
+         * Defines the water color blended with the reflection (far).
          */
         waterColor2: BABYLON.Color3;
         /**
-         * @param {number}: The blend factor related to the water color (reflection, far)
+         * Defines the blend factor related to the water color (reflection, far).
          */
         colorBlendFactor2: number;
         /**
-        * @param {number}: Represents the maximum length of a wave
-        */
+         * Defines the maximum length of a wave.
+         */
         waveLength: number;
         /**
-        * @param {number}: Defines the waves speed
-        */
+         * Defines the waves speed.
+         */
         waveSpeed: number;
+        /**
+         * Defines the number of times waves are repeated. This is typically used to adjust waves count according to the ground's size where the material is applied on.
+         */
+        waveCount: number;
         /**
          * Sets or gets whether or not automatic clipping should be enabled or not. Setting to true will save performances and
          * will avoid calculating useless pixels in the pixel shader of the water material.
@@ -960,7 +970,6 @@ declare module BABYLON {
         private _reflectionTransform;
         private _lastTime;
         private _lastDeltaTime;
-        private _renderId;
         private _useLogarithmicDepth;
         private _waitingRenderList;
         private _imageProcessingConfiguration;

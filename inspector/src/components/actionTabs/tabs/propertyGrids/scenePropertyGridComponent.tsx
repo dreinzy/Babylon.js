@@ -11,11 +11,11 @@ import { Scene } from "babylonjs/scene";
 
 import { PropertyChangedEvent } from "../../../propertyChangedEvent";
 import { LineContainerComponent } from "../../lineContainerComponent";
-import { RadioButtonLineComponent } from "../../lines/radioLineComponent";
+import { RadioButtonLineComponent } from "../../../../sharedUiComponents/lines/radioLineComponent";
 import { Color3LineComponent } from "../../lines/color3LineComponent";
 import { CheckBoxLineComponent } from "../../lines/checkBoxLineComponent";
 import { FogPropertyGridComponent } from "./fogPropertyGridComponent";
-import { FileButtonLineComponent } from "../../lines/fileButtonLineComponent";
+import { FileButtonLineComponent } from "../../../../sharedUiComponents/lines/fileButtonLineComponent";
 import { TextureLinkLineComponent } from "../../lines/textureLinkLineComponent";
 import { Vector3LineComponent } from "../../lines/vector3LineComponent";
 import { FloatLineComponent } from "../../lines/floatLineComponent";
@@ -23,7 +23,8 @@ import { SliderLineComponent } from "../../lines/sliderLineComponent";
 import { OptionsLineComponent } from "../../lines/optionsLineComponent";
 import { LockObject } from "./lockObject";
 import { GlobalState } from '../../../globalState';
-import { ButtonLineComponent } from '../../lines/buttonLineComponent';
+import { ButtonLineComponent } from '../../../../sharedUiComponents/lines/buttonLineComponent';
+import { AnimationGridComponent } from './animations/animationPropertyGridComponent';
 
 interface IScenePropertyGridComponentProps {
     globalState: GlobalState;
@@ -158,6 +159,7 @@ export class ScenePropertyGridComponent extends React.Component<IScenePropertyGr
                     <SliderLineComponent minimum={0} maximum={2} step={0.01} label="IBL Intensity" target={scene} propertyName="environmentIntensity" onPropertyChangedObservable={this.props.onPropertyChangedObservable} />
                     <FogPropertyGridComponent globalState={this.props.globalState} lockObject={this.props.lockObject} scene={scene} onPropertyChangedObservable={this.props.onPropertyChangedObservable} />
                 </LineContainerComponent>
+                <AnimationGridComponent globalState={this.props.globalState} animatable={scene} scene={scene} lockObject={this.props.lockObject} />
                 <LineContainerComponent globalState={this.props.globalState} title="MATERIAL IMAGE PROCESSING">
                     <SliderLineComponent minimum={0} maximum={4} step={0.1} label="Contrast" target={imageProcessing} propertyName="contrast" onPropertyChangedObservable={this.props.onPropertyChangedObservable} />
                     <SliderLineComponent minimum={0} maximum={4} step={0.1} label="Exposure" target={imageProcessing} propertyName="exposure" onPropertyChangedObservable={this.props.onPropertyChangedObservable} />

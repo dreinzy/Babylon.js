@@ -69,7 +69,7 @@ export class DepthReducer extends MinMaxReducer {
     /**
      * Activates the reduction computation.
      * When activated, the observers registered in onAfterReductionPerformed are
-     * called after the compuation is performed
+     * called after the computation is performed
      */
     public activate(): void {
         if (this._depthRenderer) {
@@ -98,7 +98,10 @@ export class DepthReducer extends MinMaxReducer {
         super.dispose(disposeAll);
 
         if (this._depthRenderer && disposeAll) {
-            delete this._depthRenderer.getDepthMap().getScene()?._depthRenderer[this._depthRendererId];
+            const scene = this._depthRenderer.getDepthMap().getScene();
+            if (scene) {
+                delete scene._depthRenderer[this._depthRendererId];
+            }
 
             this._depthRenderer.dispose();
             this._depthRenderer = null;

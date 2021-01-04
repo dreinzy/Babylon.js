@@ -4,12 +4,13 @@ import { Light } from "babylonjs/Lights/light";
 import { PropertyChangedEvent } from "../../../../propertyChangedEvent";
 import { LineContainerComponent } from "../../../lineContainerComponent";
 import { FloatLineComponent } from "../../../lines/floatLineComponent";
-import { TextLineComponent } from "../../../lines/textLineComponent";
+import { TextLineComponent } from "../../../../../sharedUiComponents/lines/textLineComponent";
 import { LockObject } from "../lockObject";
 import { GlobalState } from '../../../../globalState';
 import { CustomPropertyGridComponent } from '../customPropertyGridComponent';
-import { ButtonLineComponent } from '../../../lines/buttonLineComponent';
+import { ButtonLineComponent } from '../../../../../sharedUiComponents/lines/buttonLineComponent';
 import { TextInputLineComponent } from '../../../lines/textInputLineComponent';
+import { AnimationGridComponent } from '../animations/animationPropertyGridComponent';
 
 interface ICommonLightPropertyGridComponentProps {
     globalState: GlobalState,
@@ -42,6 +43,7 @@ export class CommonLightPropertyGridComponent extends React.Component<ICommonLig
                         this.props.globalState.onSelectionChangedObservable.notifyObservers(null);
                     }} />                       
                 </LineContainerComponent>
+                <AnimationGridComponent globalState={this.props.globalState} animatable={light} scene={light.getScene()} lockObject={this.props.lockObject} />
             </div>
         );
     }

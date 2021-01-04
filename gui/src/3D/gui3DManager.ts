@@ -14,7 +14,7 @@ import { Control3D } from "./controls/control3D";
 
 /**
  * Class used to manage 3D user interface
- * @see http://doc.babylonjs.com/how_to/gui3d
+ * @see https://doc.babylonjs.com/how_to/gui3d
  */
 export class GUI3DManager implements IDisposable {
     private _scene: Scene;
@@ -65,7 +65,7 @@ export class GUI3DManager implements IDisposable {
         this._utilityLayer.onlyCheckPointerDownEvents = false;
         this._utilityLayer.pickUtilitySceneFirst = false;
         this._utilityLayer.mainSceneTrackerPredicate = (mesh: Nullable<AbstractMesh>) => {
-            return mesh && mesh.metadata && mesh.metadata._node;
+            return mesh && mesh.metadata?.GUI3D?.control?._node;
         };
 
         // Root
@@ -121,7 +121,7 @@ export class GUI3DManager implements IDisposable {
             return false;
         }
 
-        let control = <Control3D>(pickingInfo.pickedMesh!.metadata);
+        let control = <Control3D>(pickingInfo.pickedMesh!.metadata?.GUI3D?.control);
         if (pickingInfo.pickedPoint) {
             this.onPickedPointChangedObservable.notifyObservers(pickingInfo.pickedPoint);
         }

@@ -2,16 +2,19 @@ import { Nullable } from "../types";
 import { Vector2, Vector3 } from "../Maths/math.vector";
 import { AbstractMesh } from "../Meshes/abstractMesh";
 import { ImageProcessingConfiguration, ImageProcessingConfigurationDefines } from "../Materials/imageProcessingConfiguration";
-import { ProceduralTexture } from "../Materials/Textures/Procedurals/proceduralTexture";
-import { RawTexture } from "../Materials/Textures/rawTexture";
-import { Scene } from "../scene";
 import { ColorGradient, FactorGradient, Color3Gradient, IValueGradient } from "../Misc/gradients";
 import { BoxParticleEmitter, IParticleEmitterType, PointParticleEmitter, HemisphericParticleEmitter, SphereParticleEmitter, SphereDirectedParticleEmitter, CylinderParticleEmitter, CylinderDirectedParticleEmitter, ConeParticleEmitter } from "../Particles/EmitterTypes/index";
 import { Constants } from "../Engines/constants";
-import { Texture } from '../Materials/Textures/texture';
+import { BaseTexture } from '../Materials/Textures/baseTexture';
 import { Color4 } from '../Maths/math.color';
+import { ThinEngine } from '../Engines/thinEngine';
+
+import "../Engines/Extensions/engine.dynamicBuffer";
 
 declare type Animation = import("../Animations/animation").Animation;
+declare type Scene = import("../scene").Scene;
+declare type ProceduralTexture = import("../Materials/Textures/Procedurals/proceduralTexture").ProceduralTexture;
+declare type RawTexture = import("../Materials/Textures/rawTexture").RawTexture;
 
 /**
  * This represents the base class for particle system in Babylon.
@@ -61,6 +64,11 @@ export class BaseParticleSystem {
      * The friendly name of the Particle system.
      */
     public name: string;
+
+    /**
+     * Snippet ID if the particle system was created from the snippet server
+     */
+    public snippetId: string;
 
     /**
      * The rendering group used by the Particle system to chose when to render.
@@ -163,7 +171,7 @@ export class BaseParticleSystem {
     /**
      * The texture used to render each particle. (this can be a spritesheet)
      */
-    public particleTexture: Nullable<Texture>;
+    public particleTexture: Nullable<BaseTexture>;
 
     /**
      * The layer mask we are rendering the particles through.
@@ -182,6 +190,7 @@ export class BaseParticleSystem {
      */
     public preventAutoStart: boolean = false;
 
+    protected _rootUrl = "";
     private _noiseTexture: Nullable<ProceduralTexture>;
 
     /**
@@ -302,7 +311,7 @@ export class BaseParticleSystem {
      * Get hosting scene
      * @returns the scene
      */
-    public getScene(): Scene {
+    public getScene(): Nullable<Scene> {
         return this._scene;
     }
 
@@ -337,7 +346,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of drag gradients.
-     * You must use addDragGradient and removeDragGradient to udpate this list
+     * You must use addDragGradient and removeDragGradient to update this list
      * @returns the list of drag gradients
      */
     public getDragGradients(): Nullable<Array<FactorGradient>> {
@@ -349,7 +358,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of limit velocity gradients.
-     * You must use addLimitVelocityGradient and removeLimitVelocityGradient to udpate this list
+     * You must use addLimitVelocityGradient and removeLimitVelocityGradient to update this list
      * @returns the list of limit velocity gradients
      */
     public getLimitVelocityGradients(): Nullable<Array<FactorGradient>> {
@@ -358,7 +367,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of color gradients.
-     * You must use addColorGradient and removeColorGradient to udpate this list
+     * You must use addColorGradient and removeColorGradient to update this list
      * @returns the list of color gradients
      */
     public getColorGradients(): Nullable<Array<ColorGradient>> {
@@ -367,7 +376,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of size gradients.
-     * You must use addSizeGradient and removeSizeGradient to udpate this list
+     * You must use addSizeGradient and removeSizeGradient to update this list
      * @returns the list of size gradients
      */
     public getSizeGradients(): Nullable<Array<FactorGradient>> {
@@ -376,7 +385,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of color remap gradients.
-     * You must use addColorRemapGradient and removeColorRemapGradient to udpate this list
+     * You must use addColorRemapGradient and removeColorRemapGradient to update this list
      * @returns the list of color remap gradients
      */
     public getColorRemapGradients(): Nullable<Array<FactorGradient>> {
@@ -385,7 +394,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of alpha remap gradients.
-     * You must use addAlphaRemapGradient and removeAlphaRemapGradient to udpate this list
+     * You must use addAlphaRemapGradient and removeAlphaRemapGradient to update this list
      * @returns the list of alpha remap gradients
      */
     public getAlphaRemapGradients(): Nullable<Array<FactorGradient>> {
@@ -394,7 +403,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of life time gradients.
-     * You must use addLifeTimeGradient and removeLifeTimeGradient to udpate this list
+     * You must use addLifeTimeGradient and removeLifeTimeGradient to update this list
      * @returns the list of life time gradients
      */
     public getLifeTimeGradients(): Nullable<Array<FactorGradient>> {
@@ -403,7 +412,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of angular speed gradients.
-     * You must use addAngularSpeedGradient and removeAngularSpeedGradient to udpate this list
+     * You must use addAngularSpeedGradient and removeAngularSpeedGradient to update this list
      * @returns the list of angular speed gradients
      */
     public getAngularSpeedGradients(): Nullable<Array<FactorGradient>> {
@@ -412,7 +421,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of velocity gradients.
-     * You must use addVelocityGradient and removeVelocityGradient to udpate this list
+     * You must use addVelocityGradient and removeVelocityGradient to update this list
      * @returns the list of velocity gradients
      */
     public getVelocityGradients(): Nullable<Array<FactorGradient>> {
@@ -421,7 +430,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of start size gradients.
-     * You must use addStartSizeGradient and removeStartSizeGradient to udpate this list
+     * You must use addStartSizeGradient and removeStartSizeGradient to update this list
      * @returns the list of start size gradients
      */
     public getStartSizeGradients(): Nullable<Array<FactorGradient>> {
@@ -430,7 +439,7 @@ export class BaseParticleSystem {
 
     /**
      * Gets the current list of emit rate gradients.
-     * You must use addEmitRateGradient and removeEmitRateGradient to udpate this list
+     * You must use addEmitRateGradient and removeEmitRateGradient to update this list
      * @returns the list of emit rate gradients
      */
     public getEmitRateGradients(): Nullable<Array<FactorGradient>> {
@@ -562,7 +571,12 @@ export class BaseParticleSystem {
     /**
      * The scene the particle system belongs to.
      */
-    protected _scene: Scene;
+    protected _scene: Nullable<Scene>;
+
+    /**
+     * The engine the particle system belongs to.
+     */
+    protected _engine: ThinEngine;
 
     /**
      * Local cache of defines for image processing.
@@ -572,12 +586,12 @@ export class BaseParticleSystem {
     /**
      * Default configuration related to image processing available in the standard Material.
      */
-    protected _imageProcessingConfiguration: ImageProcessingConfiguration;
+    protected _imageProcessingConfiguration: Nullable<ImageProcessingConfiguration>;
 
     /**
      * Gets the image processing configuration used either in this material.
      */
-    public get imageProcessingConfiguration(): ImageProcessingConfiguration {
+    public get imageProcessingConfiguration(): Nullable<ImageProcessingConfiguration> {
         return this._imageProcessingConfiguration;
     }
 
@@ -586,7 +600,7 @@ export class BaseParticleSystem {
      *
      * If sets to null, the scene one is in use.
      */
-    public set imageProcessingConfiguration(value: ImageProcessingConfiguration) {
+    public set imageProcessingConfiguration(value: Nullable<ImageProcessingConfiguration>) {
         this._attachImageProcessingConfiguration(value);
     }
 
@@ -600,7 +614,7 @@ export class BaseParticleSystem {
         }
 
         // Pick the scene configuration if needed.
-        if (!configuration) {
+        if (!configuration && this._scene) {
             this._imageProcessingConfiguration = this._scene.imageProcessingConfiguration;
         }
         else {

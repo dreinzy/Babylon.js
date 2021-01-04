@@ -106,7 +106,7 @@ export class Control3D implements IDisposable, IBehaviorAware<Control3D> {
 
     /**
      * Gets the list of attached behaviors
-     * @see http://doc.babylonjs.com/features/behaviour
+     * @see https://doc.babylonjs.com/features/behaviour
      */
     public get behaviors(): Behavior<Control3D>[] {
         return this._behaviors;
@@ -114,7 +114,7 @@ export class Control3D implements IDisposable, IBehaviorAware<Control3D> {
 
     /**
      * Attach a behavior to the control
-     * @see http://doc.babylonjs.com/features/behaviour
+     * @see https://doc.babylonjs.com/features/behaviour
      * @param behavior defines the behavior to attach
      * @returns the current control
      */
@@ -142,7 +142,7 @@ export class Control3D implements IDisposable, IBehaviorAware<Control3D> {
 
     /**
      * Remove an attached behavior
-     * @see http://doc.babylonjs.com/features/behaviour
+     * @see https://doc.babylonjs.com/features/behaviour
      * @param behavior defines the behavior to attach
      * @returns the current control
      */
@@ -162,7 +162,7 @@ export class Control3D implements IDisposable, IBehaviorAware<Control3D> {
     /**
      * Gets an attached behavior by name
      * @param name defines the name of the behavior to look for
-     * @see http://doc.babylonjs.com/features/behaviour
+     * @see https://doc.babylonjs.com/features/behaviour
      * @returns null if behavior was not found else the requested behavior
      */
     public getBehaviorByName(name: string): Nullable<Behavior<Control3D>> {
@@ -259,7 +259,7 @@ export class Control3D implements IDisposable, IBehaviorAware<Control3D> {
             if (!this.node) {
                 return;
             }
-            this._node!.metadata = this; // Store the control on the metadata field in order to get it when picking
+            this._injectGUI3DMetadata(this._node!).control = this; // Store the control on the metadata field in order to get it when picking
             this._node!.position = this.position;
             this._node!.scaling = this.scaling;
 
@@ -270,6 +270,12 @@ export class Control3D implements IDisposable, IBehaviorAware<Control3D> {
                 this._affectMaterial(mesh);
             }
         }
+    }
+
+    protected _injectGUI3DMetadata(node: TransformNode): any {
+        node.metadata = node.metadata ?? {};
+        node.metadata.GUI3D = node.metadata.GUI3D ?? {};
+        return node.metadata.GUI3D;
     }
 
     /**
@@ -414,7 +420,7 @@ export class Control3D implements IDisposable, IBehaviorAware<Control3D> {
             return true;
         }
 
-        if (type === PointerEventTypes.POINTERUP) {
+        if (type === PointerEventTypes.POINTERUP || type === PointerEventTypes.POINTERDOUBLETAP) {
             if (this._host._lastControlDown[pointerId]) {
                 this._host._lastControlDown[pointerId]._onPointerUp(this, pickedPoint, pointerId, buttonIndex, true);
             }

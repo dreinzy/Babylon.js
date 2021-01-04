@@ -2,7 +2,7 @@ import * as React from "react";
 import { Vector2 } from "babylonjs/Maths/math.vector";
 import { Observable } from "babylonjs/Misc/observable";
 
-import { NumericInputComponent } from "./numericInputComponent";
+import { NumericInputComponent } from "./../../../sharedUiComponents/lines/numericInputComponent";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { PropertyChangedEvent } from "../../propertyChangedEvent";
@@ -89,7 +89,7 @@ export class Vector2LineComponent extends React.Component<IVector2LineComponentP
 
         return (
             <div className="vector3Line">
-                <div className="firstLine">
+                <div className="firstLine" title={this.props.label}>
                     <div className="label">
                         {this.props.label}
                     </div>

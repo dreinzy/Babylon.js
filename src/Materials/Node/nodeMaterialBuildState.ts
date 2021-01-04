@@ -62,6 +62,8 @@ export class NodeMaterialBuildState {
     public _samplerDeclaration = "";
     /** @hidden */
     public _varyingTransfer = "";
+    /** @hidden */
+    public _injectAtEnd = "";
 
     private _repeatableContentAnchorIndex = 0;
     /** @hidden */
@@ -96,6 +98,10 @@ export class NodeMaterialBuildState {
             this.compilationString = `${this.compilationString}\r\n${this._varyingTransfer}`;
         }
 
+        if (this._injectAtEnd) {
+            this.compilationString = `${this.compilationString}\r\n${this._injectAtEnd}`;
+        }
+
         this.compilationString = `${this.compilationString}\r\n}`;
 
         if (this.sharedData.varyingDeclaration) {
@@ -113,6 +119,8 @@ export class NodeMaterialBuildState {
         if (this._attributeDeclaration && !isFragmentMode) {
             this.compilationString = `\r\n${emitComments ? "//Attributes\r\n" : ""}${this._attributeDeclaration}\r\n${this.compilationString}`;
         }
+
+        this.compilationString = "precision highp float;\r\n" + this.compilationString;
 
         for (var extensionName in this.extensions) {
             let extension = this.extensions[extensionName];
@@ -165,8 +173,10 @@ export class NodeMaterialBuildState {
 
     /** @hidden */
     public _emit2DSampler(name: string) {
-        this._samplerDeclaration += `uniform sampler2D ${name};\r\n`;
-        this.samplers.push(name);
+        if (this.samplers.indexOf(name) < 0) {
+            this._samplerDeclaration += `uniform sampler2D ${name};\r\n`;
+            this.samplers.push(name);
+        }
     }
 
     /** @hidden */
@@ -192,11 +202,14 @@ export class NodeMaterialBuildState {
     }
 
     /** @hidden */
-    public _emitExtension(name: string, extension: string) {
+    public _emitExtension(name: string, extension: string, define: string = "") {
         if (this.extensions[name]) {
             return;
         }
 
+        if (define) {
+            extension = `#if ${define}\r\n${extension}\r\n#endif`;
+        }
         this.extensions[name] = extension;
     }
 
@@ -346,7 +359,11 @@ export class NodeMaterialBuildState {
         this.uniforms.push(name);
 
         if (define) {
-            this._uniformDeclaration += `${notDefine ? "#ifndef" : "#ifdef"} ${define}\r\n`;
+            if (StringTools.StartsWith(define, "defined(")) {
+                this._uniformDeclaration += `#if ${define}\r\n`;
+            } else {
+                this._uniformDeclaration += `${notDefine ? "#ifndef" : "#ifdef"} ${define}\r\n`;
+            }
         }
         this._uniformDeclaration += `uniform ${type} ${name};\r\n`;
         if (define) {

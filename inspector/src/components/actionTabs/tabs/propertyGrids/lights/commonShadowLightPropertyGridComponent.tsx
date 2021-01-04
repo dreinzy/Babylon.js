@@ -11,7 +11,7 @@ import { OptionsLineComponent } from '../../../lines/optionsLineComponent';
 import { ShadowGenerator } from 'babylonjs/Lights/Shadows/shadowGenerator';
 import { CascadedShadowGenerator } from 'babylonjs/Lights/Shadows/cascadedShadowGenerator';
 import { SliderLineComponent } from '../../../lines/sliderLineComponent';
-import { ButtonLineComponent } from '../../../lines/buttonLineComponent';
+import { ButtonLineComponent } from '../../../../../sharedUiComponents/lines/buttonLineComponent';
 import { DirectionalLight } from 'babylonjs/Lights/directionalLight';
 
 interface ICommonShadowLightPropertyGridComponentProps {
@@ -40,8 +40,11 @@ export class CommonShadowLightPropertyGridComponent extends React.Component<ICom
         let generator = internals.generatorType === 0 ? new ShadowGenerator(internals.mapSize, light) : new CascadedShadowGenerator(internals.mapSize, light as DirectionalLight);
 
         scene.meshes.forEach((m) => {
+            if (m.infiniteDistance) { return; }
             generator.addShadowCaster(m);
-            m.receiveShadows = true;
+            if (!m.isAnInstance) {
+                m.receiveShadows = true;
+            }
         });
 
         this.forceUpdate();

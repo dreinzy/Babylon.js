@@ -13,6 +13,7 @@ import { LinesBuilder } from "../../Meshes/Builders/linesBuilder";
 import { LinesMesh } from '../../Meshes/linesMesh';
 import { PhysicsRaycastResult } from "../physicsRaycastResult";
 import { Scalar } from "../../Maths/math.scalar";
+import { Epsilon } from '../../Maths/math.constants';
 
 declare var Ammo: any;
 
@@ -55,6 +56,7 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
     private _tmpAmmoVectorRCA: any;
     private _tmpAmmoVectorRCB: any;
     private _raycastResult: PhysicsRaycastResult;
+    private _tmpContactPoint = new Vector3();
 
     private static readonly DISABLE_COLLISION_FLAG = 4;
     private static readonly KINEMATIC_FLAG = 2;
@@ -68,7 +70,8 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
      */
     public constructor(private _useDeltaForWorldStep: boolean = true, ammoInjection: any = Ammo, overlappingPairCache: any = null) {
         if (typeof ammoInjection === "function") {
-            ammoInjection(this.bjsAMMO);
+            Logger.Error("AmmoJS is not ready. Please make sure you await Ammo() before using the plugin.");
+            return;
         } else {
             this.bjsAMMO = ammoInjection;
         }
@@ -87,7 +90,14 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
         this.world = new this.bjsAMMO.btSoftRigidDynamicsWorld(this._dispatcher, this._overlappingPairCache, this._solver, this._collisionConfiguration, this._softBodySolver);
 
         this._tmpAmmoConcreteContactResultCallback = new this.bjsAMMO.ConcreteContactResultCallback();
-        this._tmpAmmoConcreteContactResultCallback.addSingleResult = () => { this._tmpContactCallbackResult = true; };
+        this._tmpAmmoConcreteContactResultCallback.addSingleResult = (contactPoint: any, colObj0Wrap: any, partId0: any, index0: any) => {
+            contactPoint = this.bjsAMMO.wrapPointer(contactPoint, Ammo.btManifoldPoint);
+            const worldPoint = contactPoint.getPositionWorldOnA();
+            this._tmpContactPoint.x = worldPoint.x();
+            this._tmpContactPoint.y = worldPoint.y();
+            this._tmpContactPoint.z = worldPoint.z();
+            this._tmpContactCallbackResult = true;
+        };
 
         this._raycastResult = new PhysicsRaycastResult();
 
@@ -219,8 +229,8 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
                         for (var otherImpostor of collideCallback.otherImpostors) {
                             if (mainImpostor.physicsBody.isActive() || otherImpostor.physicsBody.isActive()) {
                                 if (this._isImpostorPairInContact(mainImpostor, otherImpostor)) {
-                                    mainImpostor.onCollide({ body: otherImpostor.physicsBody });
-                                    otherImpostor.onCollide({ body: mainImpostor.physicsBody });
+                                    mainImpostor.onCollide({ body: otherImpostor.physicsBody, point: this._tmpContactPoint });
+                                    otherImpostor.onCollide({ body: mainImpostor.physicsBody, point: this._tmpContactPoint });
                                 }
                             }
                         }
@@ -328,7 +338,6 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
         vertex_data.applyToMesh(<Mesh>object);
     }
 
-    private _tmpVector = new Vector3();
     private _tmpMatrix = new Matrix();
     /**
      * Applies an impulse on the imposter
@@ -342,11 +351,9 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
             var worldPoint = this._tmpAmmoVectorA;
             var impulse = this._tmpAmmoVectorB;
 
-            // Convert contactPoint into world space
+            // Convert contactPoint relative to center of mass
             if (impostor.object && impostor.object.getWorldMatrix) {
-                impostor.object.getWorldMatrix().invertToRef(this._tmpMatrix);
-                Vector3.TransformCoordinatesToRef(contactPoint, this._tmpMatrix, this._tmpVector);
-                contactPoint = this._tmpVector;
+                contactPoint.subtractInPlace(impostor.object.getWorldMatrix().getTranslation());
             }
 
             worldPoint.setValue(contactPoint.x, contactPoint.y, contactPoint.z);
@@ -371,11 +378,9 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
             var worldPoint = this._tmpAmmoVectorA;
             var impulse = this._tmpAmmoVectorB;
 
-            // Convert contactPoint into world space
+            // Convert contactPoint relative to center of mass
             if (impostor.object && impostor.object.getWorldMatrix) {
-                impostor.object.getWorldMatrix().invertToRef(this._tmpMatrix);
-                Vector3.TransformCoordinatesToRef(contactPoint, this._tmpMatrix, this._tmpVector);
-                contactPoint = this._tmpVector;
+                contactPoint.subtractInPlace(impostor.object.getWorldMatrix().getTranslation());
             }
 
             worldPoint.setValue(contactPoint.x, contactPoint.y, contactPoint.z);
@@ -452,7 +457,13 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
                     body.setCollisionFlags(body.getCollisionFlags() | AmmoJSPlugin.DISABLE_COLLISION_FLAG);
                 }
 
-                this.world.addRigidBody(body);
+                let group = impostor.getParam("group");
+                let mask = impostor.getParam("mask");
+                if (group && mask) {
+                    this.world.addRigidBody(body, group, mask);
+                } else {
+                    this.world.addRigidBody(body);
+                }
                 impostor.physicsBody = body;
                 impostor._pluginData.toDispose = impostor._pluginData.toDispose.concat([body, rbInfo, myMotionState, startTransform, localInertia, colShape]);
             }
@@ -926,7 +937,7 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
 
         switch (impostor.type) {
             case PhysicsImpostor.SphereImpostor:
-                // Is there a better way to compare floats number? With an epsylon or with a Math function
+                // Is there a better way to compare floats number? With an epsilon or with a Math function
                 if (Scalar.WithinEpsilon(extendSize.x, extendSize.y, 0.0001) && Scalar.WithinEpsilon(extendSize.x, extendSize.z, 0.0001)) {
                     returnValue = new this.bjsAMMO.btSphereShape(extendSize.x / 2);
                 } else {
@@ -1030,15 +1041,15 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
     public setPhysicsBodyTransformation(impostor: PhysicsImpostor, newPosition: Vector3, newRotation: Quaternion) {
         var trans = impostor.physicsBody.getWorldTransform();
 
-        // If rotation/position has changed update and activate riged body
+        // If rotation/position has changed update and activate rigged body
         if (
-            trans.getOrigin().x() != newPosition.x ||
-            trans.getOrigin().y() != newPosition.y ||
-            trans.getOrigin().z() != newPosition.z ||
-            trans.getRotation().x() != newRotation.x ||
-            trans.getRotation().y() != newRotation.y ||
-            trans.getRotation().z() != newRotation.z ||
-            trans.getRotation().w() != newRotation.w
+            Math.abs(trans.getOrigin().x() - newPosition.x) > Epsilon ||
+            Math.abs(trans.getOrigin().y() - newPosition.y) > Epsilon ||
+            Math.abs(trans.getOrigin().z() - newPosition.z) > Epsilon ||
+            Math.abs(trans.getRotation().x() - newRotation.x) > Epsilon ||
+            Math.abs(trans.getRotation().y() - newRotation.y) > Epsilon ||
+            Math.abs(trans.getRotation().z() - newRotation.z) > Epsilon ||
+            Math.abs(trans.getRotation().w() - newRotation.w) > Epsilon
         ) {
             this._tmpAmmoVectorA.setValue(newPosition.x, newPosition.y, newPosition.z);
             trans.setOrigin(this._tmpAmmoVectorA);
@@ -1195,7 +1206,7 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
     }
 
     /**
-     * Sets resitution of the impostor
+     * Sets restitution of the impostor
      * @param impostor impostor to set resitution on
      * @param restitution resitution value
      */
@@ -1333,7 +1344,7 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
     * @param otherImpostor is the rigid impostor to anchor to
     * @param width ratio across width from 0 to 1
     * @param height ratio up height from 0 to 1
-    * @param influence the elasticity between cloth impostor and anchor from 0, very stretchy to 1, little strech
+    * @param influence the elasticity between cloth impostor and anchor from 0, very stretchy to 1, little stretch
     * @param noCollisionBetweenLinkedBodies when true collisions between soft impostor and anchor are ignored; default false
     */
     public appendAnchor(impostor: PhysicsImpostor, otherImpostor: PhysicsImpostor, width: number, height: number, influence: number = 1, noCollisionBetweenLinkedBodies: boolean = false) {
@@ -1350,7 +1361,7 @@ export class AmmoJSPlugin implements IPhysicsEnginePlugin {
      * @param impostor is the rope impostor to add hook to
      * @param otherImpostor is the rigid impostor to hook to
      * @param length ratio along the rope from 0 to 1
-     * @param influence the elasticity between soft impostor and anchor from 0, very stretchy to 1, little strech
+     * @param influence the elasticity between soft impostor and anchor from 0, very stretchy to 1, little stretch
      * @param noCollisionBetweenLinkedBodies when true collisions between soft impostor and anchor are ignored; default false
      */
     public appendHook(impostor: PhysicsImpostor, otherImpostor: PhysicsImpostor, length: number, influence: number = 1, noCollisionBetweenLinkedBodies: boolean = false) {
